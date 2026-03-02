@@ -1,0 +1,114 @@
+import 'dotenv/config'
+import express from 'express'
+import { createServer } from 'node:http'
+import { Server } from 'socket.io'
+import cors from 'cors'
+import mongoose from 'mongoose'
+import { nanoid } from 'nanoid'
+import { verifySocketToken, type AuthenticatedSocket } from './middleware/authMiddleware'
+import { registerRoomHandlers } from './handlers/roomHandler'
+import { registerDrawingHandlers } from './handlers/drawingHandler'
+import { registerCursorHandlers } from './handlers/cursorHandler'
+import { RoomModel } from './models/Room'
+import type { Room } from './types'
+
+const PORT = Number(process.env.PORT ?? 3000)
+const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173'
+const MONGODB_URI = process.env.MONGODB_URI ?? ''
+
+// In-memory fallback used when MongoDB is not configured
+const memoryRooms: Room[] = []
+const useMemory = () => !MONGODB_URI
+
+// Express app
+const app = express()
+app.use(cors({ origin: CLIENT_URL, credentials: true }))
+app.use(express.json())
+
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
+// REST: list rooms
+app.get('/rooms', async (_req, res) => {
+  if (useMemory()) {
+    res.json([...memoryRooms].reverse())
+    return
+  }
+  try {
+    const rooms = await RoomModel.find().sort({ createdAt: -1 }).limit(50)
+    res.json(rooms)
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch rooms' })
+  }
+})
+
+// REST: create room
+app.post('/rooms', async (req, res) => {
+  const { name, ownerId } = req.body as { name?: string; ownerId?: string }
+  if (!name || !ownerId) {
+    res.status(400).json({ error: 'name and ownerId are required' })
+    return
+  }
+
+  if (useMemory()) {
+    const room: Room = {
+      id: nanoid(),
+      name,
+      ownerId,
+      participants: [],
+      createdAt: new Date().toISOString(),
+    }
+    memoryRooms.push(room)
+    res.status(201).json(room)
+    return
+  }
+
+  try {
+    const room = await RoomModel.create({ id: nanoid(), name, ownerId, participants: [] })
+    res.status(201).json(room)
+  } catch {
+    res.status(500).json({ error: 'Failed to create room' })
+  }
+})
+
+// HTTP + Socket.io server
+const httpServer = createServer(app)
+const io = new Server(httpServer, {
+  cors: { origin: CLIENT_URL, methods: ['GET', 'POST'] },
+})
+
+// Auth middleware on every socket connection
+io.use(verifySocketToken)
+
+io.on('connection', (socket) => {
+  const authSocket = socket as AuthenticatedSocket
+  console.log(`[socket] connected: ${authSocket.userId} (${authSocket.userName})`)
+
+  registerRoomHandlers(io, authSocket)
+  registerDrawingHandlers(io, authSocket)
+  registerCursorHandlers(authSocket)
+
+  socket.on('disconnect', () => {
+    console.log(`[socket] disconnected: ${authSocket.userId}`)
+  })
+})
+
+// MongoDB + start
+async function start() {
+  if (!MONGODB_URI) {
+    console.warn('[mongo] MONGODB_URI not set — skipping database connection')
+  } else {
+    await mongoose.connect(MONGODB_URI)
+    console.log('[mongo] connected')
+  }
+
+  httpServer.listen(PORT, () => {
+    console.log(`[server] listening on http://localhost:${PORT}`)
+  })
+}
+
+start().catch((err) => {
+  console.error('[server] startup error:', err)
+  process.exit(1)
+})
