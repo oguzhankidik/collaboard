@@ -48,10 +48,17 @@ app.get('/rooms', async (_req, res) => {
 })
 
 // REST: create room
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 app.post('/rooms', async (req, res) => {
   const { name, ownerId } = req.body as { name?: string; ownerId?: string }
   if (!name || !ownerId) {
     res.status(400).json({ error: 'name and ownerId are required' })
+    return
+  }
+
+  if (UUID_RE.test(ownerId)) {
+    res.status(403).json({ error: 'Guest users cannot create rooms' })
     return
   }
 

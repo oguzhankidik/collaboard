@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useAuthStore } from '@/stores/authStore'
+import { useRoomStore } from '@/stores/roomStore'
 import { STROKE_WIDTHS } from '@/constants'
 import type { ToolType } from '@/types'
 
+const emit = defineEmits<{ 'clear-board': [] }>()
+
 const canvasStore = useCanvasStore()
+const authStore = useAuthStore()
+const roomStore = useRoomStore()
+
+const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
 
 const tools: { type: ToolType; label: string }[] = [
   { type: 'pen',    label: 'Pen' },
@@ -240,6 +248,27 @@ const selectDropdownStyle = computed(() => ({
         <rect x="2" y="12" width="12" height="2" fill="currentColor"/>
         <rect x="2" y="10" width="2" height="2" fill="currentColor"/>
         <rect x="12" y="10" width="2" height="2" fill="currentColor"/>
+      </svg>
+    </button>
+
+    <!-- Clear board (host only) -->
+    <button
+      v-if="isOwner"
+      title="Clear board (host only)"
+      class="btn-icon text-red-400 hover:text-red-300"
+      @click="emit('clear-board')"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16">
+        <rect x="2" y="2" width="2" height="2" fill="currentColor"/>
+        <rect x="12" y="2" width="2" height="2" fill="currentColor"/>
+        <rect x="4" y="4" width="2" height="2" fill="currentColor"/>
+        <rect x="10" y="4" width="2" height="2" fill="currentColor"/>
+        <rect x="6" y="6" width="4" height="2" fill="currentColor"/>
+        <rect x="6" y="8" width="4" height="2" fill="currentColor"/>
+        <rect x="4" y="10" width="2" height="2" fill="currentColor"/>
+        <rect x="10" y="10" width="2" height="2" fill="currentColor"/>
+        <rect x="2" y="12" width="2" height="2" fill="currentColor"/>
+        <rect x="12" y="12" width="2" height="2" fill="currentColor"/>
       </svg>
     </button>
   </div>

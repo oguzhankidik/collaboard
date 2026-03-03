@@ -220,7 +220,7 @@ function handleText(e: MouseEvent) {
 
 <template>
   <div class="relative w-full h-full overflow-hidden bg-theme-bg">
-    <ToolBar />
+    <ToolBar @clear-board="props.socket?.emit('board:clear', roomId)" />
 
     <canvas
       ref="canvasRef"

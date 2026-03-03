@@ -6,10 +6,16 @@ let socket: Socket | null = null
 export async function getSocket(): Promise<Socket> {
   if (socket?.connected) return socket
 
-  const token = await auth.currentUser?.getIdToken()
+  const firebaseToken = await auth.currentUser?.getIdToken()
+  const authPayload = firebaseToken
+    ? { token: firebaseToken }
+    : {
+        guestId: localStorage.getItem('guest_id') ?? '',
+        guestName: localStorage.getItem('guest_name') ?? '',
+      }
 
   socket = io(import.meta.env.VITE_SOCKET_URL as string, {
-    auth: { token },
+    auth: authPayload,
     autoConnect: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 2000,

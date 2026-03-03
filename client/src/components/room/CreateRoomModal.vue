@@ -20,6 +20,10 @@ const error = ref<string | null>(null)
 
 async function create() {
   if (!name.value.trim()) return
+  if (authStore.user && 'isGuest' in authStore.user) {
+    error.value = 'Guest users cannot create rooms'
+    return
+  }
 
   loading.value = true
   error.value = null

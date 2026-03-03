@@ -34,6 +34,7 @@ onMounted(async () => {
 
   socket.value.once('room:lobby', (state: LobbyState) => {
     roomStore.setLobbyState(state.ownerId, state.status, state.participants)
+    roomStore.setCurrentRoomId(roomId)
     phase.value = state.status === 'started' ? 'canvas' : 'lobby'
   })
 
@@ -56,6 +57,10 @@ onMounted(async () => {
     router.push({ name: 'home' })
   })
 
+  socket.value.on('room:host_changed', (newOwnerId: string) => {
+    roomStore.setRoomOwnerId(newOwnerId)
+  })
+
   socket.value.on('user:joined', (u: { id: string; name: string }) => {
     roomStore.addLobbyParticipant(u)
   })
@@ -72,17 +77,29 @@ onMounted(async () => {
     roomStore.setChatHistory(msgs)
   })
 
+  socket.value.on('board:cleared', () => {
+    canvasStore.setElements([])
+    canvasStore.clearHistory()
+  })
+
   socket.value.emit('room:join', roomId)
 })
 
 onUnmounted(() => {
   canvasStore.setElements([])
   roomStore.setLobbyState('', 'waiting', [])
+  roomStore.setCurrentRoomId(null)
   roomStore.clearChat()
 })
 
-function goHome() {
-  router.push({ name: 'home' })
+function leaveRoom() {
+  if (!socket.value) {
+    router.push({ name: 'home' })
+    return
+  }
+  socket.value.emit('room:leave', roomId, () => {
+    router.push({ name: 'home' })
+  })
 }
 
 function confirmStop() {
@@ -94,6 +111,10 @@ function confirmClose() {
   socket.value?.emit('room:close', roomId)
   showCloseModal.value = false
 }
+
+function handleClearBoard() {
+  socket.value?.emit('board:clear', roomId)
+}
 </script>
 
 <template>
@@ -101,7 +122,7 @@ function confirmClose() {
     <!-- Header — visible in every phase -->
     <header class="flex items-center justify-between px-4 py-2 z-20 shrink-0 header-accent-border bg-theme-surface">
       <div class="flex items-center gap-3">
-        <AppButton variant="secondary" @click="goHome">← Home</AppButton>
+        <AppButton variant="secondary" @click="leaveRoom">← Leave Room</AppButton>
         <span class="text-xs font-mono text-theme-muted">{{ roomId }}</span>
       </div>
       <div class="flex items-center gap-3">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import type { Socket } from 'socket.io-client'
 import { useRoomStore } from '@/stores/roomStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -15,6 +15,16 @@ const roomStore = useRoomStore()
 const authStore = useAuthStore()
 
 const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
+
+const copied = ref(false)
+
+function copyLink() {
+  const url = `${window.location.origin}/board/${props.roomId}`
+  navigator.clipboard.writeText(url).then(() => {
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  })
+}
 
 function startRoom() {
   props.socket?.emit('room:start', props.roomId)
@@ -75,7 +85,9 @@ function startRoom() {
 
         <!-- Action buttons -->
         <div class="flex gap-2">
-          <AppButton variant="secondary" class="flex-1" disabled>⚙ Settings</AppButton>
+          <AppButton variant="secondary" class="flex-1" @click="copyLink">
+            {{ copied ? '✓ Copied!' : '⎘ Share' }}
+          </AppButton>
           <AppButton
             variant="primary"
             class="flex-1"

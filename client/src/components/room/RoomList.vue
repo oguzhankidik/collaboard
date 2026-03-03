@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRoomStore } from '@/stores/roomStore'
 import type { Room } from '@/types'
@@ -9,6 +9,8 @@ const roomStore = useRoomStore()
 
 const loading = ref(false)
 const error = ref<string | null>(null)
+
+const isInRoom = computed(() => roomStore.currentRoomId !== null)
 
 onMounted(async () => {
   loading.value = true
@@ -26,6 +28,7 @@ onMounted(async () => {
 })
 
 function joinRoom(roomId: string) {
+  if (isInRoom.value) return
   router.push({ name: 'board', params: { roomId } })
 }
 </script>
@@ -47,12 +50,14 @@ function joinRoom(roomId: string) {
         v-for="room in roomStore.rooms"
         :key="room.id"
         class="card-hover flex flex-col gap-2"
+        :class="{ 'opacity-50 cursor-not-allowed': isInRoom }"
         @click="joinRoom(room.id)"
       >
         <p class="text-sm font-medium text-theme">{{ room.name }}</p>
         <div class="flex items-center justify-between">
           <span class="tag">{{ room.participants.length }} participant(s)</span>
-          <span class="text-xs text-glow-accent text-theme-accent">Join →</span>
+          <span v-if="!isInRoom" class="text-xs text-glow-accent text-theme-accent">Join →</span>
+          <span v-else class="text-xs text-theme-muted">—</span>
         </div>
       </div>
     </div>

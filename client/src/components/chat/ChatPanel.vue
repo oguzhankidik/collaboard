@@ -10,7 +10,6 @@ const props = defineProps<{
 
 const roomStore = useRoomStore()
 
-const isExpanded = ref(true)
 const inputText = ref('')
 const messageListRef = ref<HTMLDivElement | null>(null)
 
@@ -49,44 +48,38 @@ function onKeydown(e: KeyboardEvent) {
     <!-- Titlebar -->
     <div class="window-titlebar px-2 h-7">
       <span>■ CHAT</span>
-      <button class="minimize-btn" @click="isExpanded = !isExpanded">
-        {{ isExpanded ? '─' : '+' }}
-      </button>
     </div>
 
-    <!-- Body (collapsible) -->
-    <template v-if="isExpanded">
-      <!-- Message list -->
-      <div ref="messageListRef" class="message-list overflow-y-auto flex flex-col gap-2 p-2">
-        <div
-          v-for="(msg, i) in roomStore.chatMessages"
-          :key="i"
-          class="flex flex-col gap-0.5"
-        >
-          <div class="flex items-baseline justify-between gap-1">
-            <span class="text-theme-accent font-terminal text-xs truncate">{{ msg.userName }}</span>
-            <span class="text-theme-muted font-terminal shrink-0 text-[10px]">{{ formatTime(msg.timestamp) }}</span>
-          </div>
-          <span class="text-theme font-terminal text-xs break-words">{{ msg.message }}</span>
+    <!-- Message list -->
+    <div ref="messageListRef" class="message-list overflow-y-auto flex flex-col gap-2 p-2">
+      <div
+        v-for="(msg, i) in roomStore.chatMessages"
+        :key="i"
+        class="flex flex-col gap-0.5"
+      >
+        <div class="flex items-baseline justify-between gap-1">
+          <span class="text-theme-accent font-terminal text-md truncate">{{ msg.userName }}</span>
+          <span class="text-theme-muted font-terminal shrink-0 text-md">{{ formatTime(msg.timestamp) }}</span>
         </div>
-
-        <div v-if="roomStore.chatMessages.length === 0" class="text-theme-muted font-terminal text-xs py-1">
-          No messages yet…
-        </div>
+        <span class="text-theme font-terminal text-md break-words">{{ msg.message }}</span>
       </div>
 
-      <!-- Input row -->
-      <div class="flex gap-1 px-2 pb-2 shrink-0">
-        <input
-          v-model="inputText"
-          class="input-field flex-1 py-1 text-xs"
-          placeholder="Say something…"
-          maxlength="500"
-          @keydown="onKeydown"
-        />
-        <button class="send-btn" @click="sendMessage">▶</button>
+      <div v-if="roomStore.chatMessages.length === 0" class="text-theme-muted font-terminal text-md py-1">
+        No messages yet…
       </div>
-    </template>
+    </div>
+
+    <!-- Input row -->
+    <div class="flex gap-1 px-2 pb-2 shrink-0">
+      <input
+        v-model="inputText"
+        class="input-field flex-1 py-1"
+        placeholder="Say something…"
+        maxlength="500"
+        @keydown="onKeydown"
+      />
+      <button class="send-btn" @click="sendMessage">▶</button>
+    </div>
   </div>
 </template>
 

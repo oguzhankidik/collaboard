@@ -5,6 +5,7 @@ import type { Room, Participant, RoomStatus, ChatMessage } from '@/types'
 export const useRoomStore = defineStore('room', () => {
   const rooms = ref<Room[]>([])
   const currentRoom = ref<Room | null>(null)
+  const currentRoomId = ref<string | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -19,6 +20,10 @@ export const useRoomStore = defineStore('room', () => {
 
   function setCurrentRoom(room: Room | null) {
     currentRoom.value = room
+  }
+
+  function setCurrentRoomId(id: string | null) {
+    currentRoomId.value = id
   }
 
   function addRoom(room: Room) {
@@ -45,6 +50,10 @@ export const useRoomStore = defineStore('room', () => {
     roomStatus.value = s
   }
 
+  function setRoomOwnerId(id: string) {
+    roomOwnerId.value = id
+  }
+
   function addChatMessage(msg: ChatMessage) {
     chatMessages.value.push(msg)
   }
@@ -60,6 +69,7 @@ export const useRoomStore = defineStore('room', () => {
   return {
     rooms,
     currentRoom,
+    currentRoomId,
     loading,
     error,
     lobbyParticipants,
@@ -68,11 +78,13 @@ export const useRoomStore = defineStore('room', () => {
     chatMessages,
     setRooms,
     setCurrentRoom,
+    setCurrentRoomId,
     addRoom,
     setLobbyState,
     addLobbyParticipant,
     removeLobbyParticipant,
     setRoomStatus,
+    setRoomOwnerId,
     addChatMessage,
     setChatHistory,
     clearChat,

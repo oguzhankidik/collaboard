@@ -52,6 +52,12 @@ export interface ChatMessage {
   timestamp: number
 }
 
+export interface GuestUser {
+  uid: string
+  displayName: string
+  isGuest: true
+}
+
 export interface SocketEvents {
   // Client → Server
   'draw:start': (element: DrawElement) => void
@@ -64,6 +70,7 @@ export interface SocketEvents {
   'room:stop': (roomId: string) => void
   'room:close': (roomId: string) => void
   'chat:send': (payload: { roomId: string; message: string }) => void
+  'board:clear': (roomId: string) => void
 
   // Server → Client
   'draw:remote': (element: DrawElement) => void
@@ -73,8 +80,10 @@ export interface SocketEvents {
   'room:started': () => void
   'room:stopped': () => void
   'room:closed': () => void
+  'room:host_changed': (newOwnerId: string) => void
   'user:joined': (user: { id: string; name: string }) => void
   'user:left': (userId: string) => void
   'chat:message': (msg: ChatMessage) => void
   'chat:history': (messages: ChatMessage[]) => void
+  'board:cleared': () => void
 }

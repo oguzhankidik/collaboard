@@ -6,6 +6,67 @@ import type { Room, RoomStatus, ChatMessage } from '../types'
 
 const MAX_PARTICIPANTS = 20
 
+async function handleParticipantLeave(
+  io: Server,
+  userId: string,
+  roomId: string,
+  memoryRooms: Room[],
+  lobbyParticipants: Map<string, Map<string, string>>,
+  roomStatuses: Map<string, RoomStatus>,
+  roomMessages: Map<string, ChatMessage[]>,
+  useMemory: () => boolean,
+): Promise<void> {
+  // Determine current owner before removing participant
+  let currentOwnerId: string | undefined
+  if (useMemory()) {
+    currentOwnerId = memoryRooms.find((r) => r.id === roomId)?.ownerId
+  } else {
+    const doc = await RoomModel.findOne({ id: roomId })
+    currentOwnerId = doc?.ownerId
+  }
+
+  // Remove from participant map
+  const names = lobbyParticipants.get(roomId)
+  names?.delete(userId)
+
+  // Remove from DB participants list
+  if (!useMemory()) {
+    await RoomModel.updateOne({ id: roomId }, { $pull: { participants: userId } })
+  }
+
+  // Notify remaining participants
+  io.to(roomId).emit('user:left', userId)
+
+  const remaining = [...(names?.keys() ?? [])]
+
+  if (remaining.length === 0) {
+    // Last person left — clean up the room entirely
+    lobbyParticipants.delete(roomId)
+    roomStatuses.delete(roomId)
+    roomMessages.delete(roomId)
+
+    if (useMemory()) {
+      const idx = memoryRooms.findIndex((r) => r.id === roomId)
+      if (idx !== -1) memoryRooms.splice(idx, 1)
+    } else {
+      await RoomModel.deleteOne({ id: roomId })
+      await BoardModel.deleteOne({ roomId })
+    }
+  } else if (currentOwnerId === userId) {
+    // Host left and others remain — transfer to earliest joined participant
+    const newOwnerId = remaining[0]
+
+    if (useMemory()) {
+      const room = memoryRooms.find((r) => r.id === roomId)
+      if (room) room.ownerId = newOwnerId
+    } else {
+      await RoomModel.updateOne({ id: roomId }, { ownerId: newOwnerId })
+    }
+
+    io.to(roomId).emit('room:host_changed', newOwnerId)
+  }
+}
+
 export function registerRoomHandlers(
   io: Server,
   socket: AuthenticatedSocket,
@@ -17,6 +78,13 @@ export function registerRoomHandlers(
 ): void {
   socket.on('room:join', async (roomId: string) => {
     try {
+      // Prevent joining a second room while already in one
+      const currentRooms = [...socket.rooms].filter((r) => r !== socket.id)
+      if (currentRooms.length > 0 && !currentRooms.includes(roomId)) {
+        socket.emit('error', { message: 'You are already in another room' })
+        return
+      }
+
       let room: Room | null = null
 
       if (useMemory()) {
@@ -176,31 +244,46 @@ export function registerRoomHandlers(
     }
   })
 
-  socket.on('room:leave', async (roomId: string) => {
-    await socket.leave(roomId)
+  socket.on('board:clear', async (roomId: string) => {
+    try {
+      let ownerId: string | undefined
 
-    const names = lobbyParticipants.get(roomId)
-    names?.delete(socket.userId)
+      if (useMemory()) {
+        const room = memoryRooms.find((r) => r.id === roomId)
+        ownerId = room?.ownerId
+      } else {
+        const doc = await RoomModel.findOne({ id: roomId })
+        ownerId = doc?.ownerId
+      }
 
-    if (!useMemory()) {
-      await RoomModel.updateOne({ id: roomId }, { $pull: { participants: socket.userId } })
+      if (!ownerId || ownerId !== socket.userId) return
+
+      if (!useMemory()) {
+        await BoardModel.updateOne({ roomId }, { $set: { elements: [] } })
+      }
+
+      io.to(roomId).emit('board:cleared')
+    } catch {
+      // Silently ignore
     }
+  })
 
-    io.to(roomId).emit('user:left', socket.userId)
+  socket.on('room:leave', async (roomId: string, ack?: () => void) => {
+    await socket.leave(roomId)
+    await handleParticipantLeave(
+      io, socket.userId, roomId,
+      memoryRooms, lobbyParticipants, roomStatuses, roomMessages, useMemory,
+    )
+    ack?.()
   })
 
   socket.on('disconnecting', async () => {
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
-
-      const names = lobbyParticipants.get(roomId)
-      names?.delete(socket.userId)
-
-      if (!useMemory()) {
-        await RoomModel.updateOne({ id: roomId }, { $pull: { participants: socket.userId } })
-      }
-
-      io.to(roomId).emit('user:left', socket.userId)
+      await handleParticipantLeave(
+        io, socket.userId, roomId,
+        memoryRooms, lobbyParticipants, roomStatuses, roomMessages, useMemory,
+      )
     }
   })
 }

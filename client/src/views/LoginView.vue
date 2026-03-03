@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { useAuth } from '@/composables/useAuth'
 
-const { loading, error, signInWithGoogle } = useAuth()
+const { loading, error, signInWithGoogle, signInAsGuest } = useAuth()
+const guestName = ref('')
+
+function loginAsGuest() {
+  signInAsGuest(guestName.value)
+}
 </script>
 
 <template>
@@ -33,6 +39,30 @@ const { loading, error, signInWithGoogle } = useAuth()
           <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
         </svg>
         Continue with Google
+      </AppButton>
+
+      <div class="flex items-center gap-3 my-6">
+        <div class="flex-1 h-px bg-theme-border"></div>
+        <span class="text-xs text-theme-muted">or</span>
+        <div class="flex-1 h-px bg-theme-border"></div>
+      </div>
+
+      <input
+        v-model="guestName"
+        type="text"
+        class="input-field w-full mb-3"
+        placeholder="Display name…"
+        maxlength="50"
+        @keydown.enter="loginAsGuest"
+      />
+      <AppButton
+        variant="secondary"
+        :disabled="!guestName.trim() || loading"
+        :loading="loading"
+        class="w-full justify-center"
+        @click="loginAsGuest"
+      >
+        Continue as Guest
       </AppButton>
     </div>
   </div>

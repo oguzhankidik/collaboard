@@ -64,6 +64,11 @@ export const useCanvasStore = defineStore('canvas', () => {
     activeStrokeWidth.value = width
   }
 
+  function clearHistory() {
+    history.value = []
+    redoStack.value = []
+  }
+
   return {
     elements,
     activeTool,
@@ -81,5 +86,6 @@ export const useCanvasStore = defineStore('canvas', () => {
     setActiveTool,
     setActiveColor,
     setActiveStrokeWidth,
+    clearHistory,
   }
 })
