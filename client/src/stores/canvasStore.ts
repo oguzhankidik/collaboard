@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { DrawElement, ToolType, Point } from '@/types'
+import { ZOOM_MIN, ZOOM_MAX } from '@/constants'
 
 export const useCanvasStore = defineStore('canvas', () => {
   const elements = ref<DrawElement[]>([])
@@ -9,6 +10,26 @@ export const useCanvasStore = defineStore('canvas', () => {
   const activeStrokeWidth = ref(2)
   const history = ref<DrawElement[][]>([])
   const redoStack = ref<DrawElement[][]>([])
+
+  // Viewport state
+  const zoom = ref(1)
+  const panX = ref(0)
+  const panY = ref(0)
+
+  function setZoom(z: number) {
+    zoom.value = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z))
+  }
+
+  function setPan(x: number, y: number) {
+    panX.value = x
+    panY.value = y
+  }
+
+  function resetView() {
+    zoom.value = 1
+    panX.value = 0
+    panY.value = 0
+  }
 
   function setElements(list: DrawElement[]) {
     elements.value = list
@@ -76,6 +97,9 @@ export const useCanvasStore = defineStore('canvas', () => {
     activeStrokeWidth,
     history,
     redoStack,
+    zoom,
+    panX,
+    panY,
     setElements,
     addElement,
     updateElement,
@@ -87,5 +111,8 @@ export const useCanvasStore = defineStore('canvas', () => {
     setActiveColor,
     setActiveStrokeWidth,
     clearHistory,
+    setZoom,
+    setPan,
+    resetView,
   }
 })

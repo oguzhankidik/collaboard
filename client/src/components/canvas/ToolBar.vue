@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useRoomStore } from '@/stores/roomStore'
-import { STROKE_WIDTHS } from '@/constants'
+import { STROKE_WIDTHS, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } from '@/constants'
 import type { ToolType } from '@/types'
 
 const emit = defineEmits<{ 'clear-board': [] }>()
@@ -165,6 +165,24 @@ const selectDropdownStyle = computed(() => ({
       </svg>
     </button>
 
+    <!-- Hand / Pan -->
+    <button
+      title="Pan"
+      class="btn-icon"
+      :class="{ active: canvasStore.activeTool === 'hand' }"
+      @click="canvasStore.setActiveTool('hand')"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16">
+        <rect x="5" y="2" width="2" height="6" fill="currentColor"/>
+        <rect x="7" y="1" width="2" height="7" fill="currentColor"/>
+        <rect x="9" y="2" width="2" height="6" fill="currentColor"/>
+        <rect x="11" y="4" width="2" height="4" fill="currentColor"/>
+        <rect x="3" y="9" width="2" height="4" fill="currentColor"/>
+        <rect x="5" y="8" width="8" height="5" fill="currentColor"/>
+        <rect x="3" y="13" width="10" height="2" fill="currentColor"/>
+      </svg>
+    </button>
+
     <!-- Divider -->
     <div class="toolbar-divider" />
 
@@ -271,5 +289,27 @@ const selectDropdownStyle = computed(() => ({
         <rect x="12" y="12" width="2" height="2" fill="currentColor"/>
       </svg>
     </button>
+
+    <!-- Divider -->
+    <div class="toolbar-divider" />
+
+    <!-- Zoom controls -->
+    <button
+      title="Zoom out"
+      class="btn-icon text-base font-bold leading-none"
+      :disabled="canvasStore.zoom <= ZOOM_MIN"
+      @click="canvasStore.setZoom(canvasStore.zoom - ZOOM_STEP)"
+    >−</button>
+    <button
+      title="Reset zoom"
+      class="btn-icon text-[10px] font-terminal w-10 text-center"
+      @click="canvasStore.resetView()"
+    >{{ Math.round(canvasStore.zoom * 100) }}%</button>
+    <button
+      title="Zoom in"
+      class="btn-icon text-base font-bold leading-none"
+      :disabled="canvasStore.zoom >= ZOOM_MAX"
+      @click="canvasStore.setZoom(canvasStore.zoom + ZOOM_STEP)"
+    >+</button>
   </div>
 </template>

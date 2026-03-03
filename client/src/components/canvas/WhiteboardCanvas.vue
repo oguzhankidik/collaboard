@@ -6,7 +6,7 @@ import type { DrawElement, Point } from '@/types'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useCanvas, hitTestElement } from '@/composables/useCanvas'
-import { CURSOR_THROTTLE_MS } from '@/constants'
+import { CURSOR_THROTTLE_MS, ZOOM_MIN, ZOOM_MAX, ZOOM_WHEEL_FACTOR } from '@/constants'
 import CursorOverlay from './CursorOverlay.vue'
 import ToolBar from './ToolBar.vue'
 import ParticipantPanel from './ParticipantPanel.vue'
@@ -20,7 +20,7 @@ const roomId = route.params.roomId as string
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasStore = useCanvasStore()
 const authStore = useAuthStore()
-const { redrawAll, drawElement, canvasPoint, drawSelectionBox } = useCanvas(canvasRef)
+const { redrawAll, canvasPoint, drawSelectionBox } = useCanvas(canvasRef)
 
 // Drawing state
 const isDrawing = ref(false)
@@ -36,6 +36,11 @@ let dragStart: Point | null = null
 let dragOriginPoints: Point[] = []
 let hasMovedDuringDrag = false
 
+// Pan state
+const isPanning = ref(false)
+const panStartScreen = ref<Point>({ x: 0, y: 0 })
+const panStartOffset = ref<Point>({ x: 0, y: 0 })
+
 // rAF render loop
 let animFrameId: number | null = null
 
@@ -43,12 +48,7 @@ function scheduleRender() {
   if (animFrameId !== null) return
   animFrameId = requestAnimationFrame(() => {
     animFrameId = null
-    redrawAll(canvasStore.elements)
-    if (currentElement.value) drawElement(currentElement.value)
-    if (selectedElementId.value) {
-      const sel = canvasStore.elements.find((e) => e.id === selectedElementId.value)
-      if (sel) drawSelectionBox(sel)
-    }
+    redrawAll(canvasStore.elements, currentElement.value, selectedElementId.value)
   })
 }
 
@@ -56,18 +56,14 @@ function scheduleRender() {
 onMounted(() => {
   props.socket?.on('draw:remote', (element: DrawElement) => {
     canvasStore.updateElement(element)
-    redrawAll(canvasStore.elements)
+    redrawAll(canvasStore.elements, null, selectedElementId.value)
   })
 })
 
 watch(
   () => canvasStore.elements,
   () => {
-    redrawAll(canvasStore.elements)
-    if (selectedElementId.value) {
-      const el = canvasStore.elements.find((e) => e.id === selectedElementId.value)
-      if (el) drawSelectionBox(el)
-    }
+    redrawAll(canvasStore.elements, null, selectedElementId.value)
   },
   { deep: true },
 )
@@ -81,8 +77,39 @@ watch(
   },
 )
 
+watch(
+  () => [canvasStore.zoom, canvasStore.panX, canvasStore.panY],
+  () => {
+    scheduleRender()
+  },
+)
+
+// --- Wheel zoom ---
+function onWheel(e: WheelEvent) {
+  const rect = canvasRef.value!.getBoundingClientRect()
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+
+  const oldZoom = canvasStore.zoom
+  const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR
+  const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, oldZoom * factor))
+
+  const worldX = mx / oldZoom + canvasStore.panX
+  const worldY = my / oldZoom + canvasStore.panY
+  canvasStore.setZoom(newZoom)
+  canvasStore.setPan(worldX - mx / newZoom, worldY - my / newZoom)
+  scheduleRender()
+}
+
 // --- Drawing events ---
 function onPointerDown(e: MouseEvent) {
+  if (canvasStore.activeTool === 'hand') {
+    isPanning.value = true
+    panStartScreen.value = { x: e.clientX, y: e.clientY }
+    panStartOffset.value = { x: canvasStore.panX, y: canvasStore.panY }
+    return
+  }
+
   if (canvasStore.activeTool === 'select') {
     const point = canvasPoint(e)
     const hit = [...canvasStore.elements].reverse().find((el) => hitTestElement(el, point))
@@ -93,8 +120,7 @@ function onPointerDown(e: MouseEvent) {
       dragOriginPoints = hit.points.map((p) => ({ ...p }))
       hasMovedDuringDrag = false
     }
-    redrawAll(canvasStore.elements)
-    if (hit) drawSelectionBox(hit)
+    redrawAll(canvasStore.elements, null, hit?.id ?? null)
     return
   }
 
@@ -124,10 +150,21 @@ function onPointerMove(e: MouseEvent) {
   const now = Date.now()
   const point = canvasPoint(e)
 
-  // Cursor broadcast — always throttled
+  // Cursor broadcast — always throttled (world-space position)
   if (now - lastCursorEmit >= CURSOR_THROTTLE_MS) {
     lastCursorEmit = now
     props.socket?.emit('cursor:move', point)
+  }
+
+  if (isPanning.value) {
+    const dx = e.clientX - panStartScreen.value.x
+    const dy = e.clientY - panStartScreen.value.y
+    canvasStore.setPan(
+      panStartOffset.value.x - dx / canvasStore.zoom,
+      panStartOffset.value.y - dy / canvasStore.zoom,
+    )
+    scheduleRender()
+    return
   }
 
   if (canvasStore.activeTool === 'select') {
@@ -173,6 +210,11 @@ function onPointerUp() {
   if (animFrameId !== null) {
     cancelAnimationFrame(animFrameId)
     animFrameId = null
+  }
+
+  if (isPanning.value) {
+    isPanning.value = false
+    return
   }
 
   if (canvasStore.activeTool === 'select') {
@@ -226,18 +268,23 @@ function handleText(e: MouseEvent) {
       ref="canvasRef"
       class="absolute inset-0 w-full h-full"
       :class="
-        canvasStore.activeTool !== 'select'
-          ? 'cursor-crosshair'
-          : isDragging
+        canvasStore.activeTool === 'hand'
+          ? isPanning
             ? 'cursor-grabbing'
-            : isHoveringElement
-              ? 'cursor-grab'
-              : 'cursor-default'
+            : 'cursor-grab'
+          : canvasStore.activeTool !== 'select'
+            ? 'cursor-crosshair'
+            : isDragging
+              ? 'cursor-grabbing'
+              : isHoveringElement
+                ? 'cursor-grab'
+                : 'cursor-default'
       "
       @mousedown="onPointerDown"
       @mousemove="onPointerMove"
       @mouseup="onPointerUp"
       @mouseleave="onPointerUp"
+      @wheel.prevent="onWheel"
     />
 
     <CursorOverlay :socket="props.socket" />

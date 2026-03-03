@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { Ref } from 'vue'
 import type { DrawElement, Point } from '@/types'
+import { useCanvasStore } from '@/stores/canvasStore'
 
 export function getElementBounds(element: DrawElement): { x: number; y: number; w: number; h: number } {
   if (element.type === 'text' && element.points.length > 0) {
@@ -75,11 +76,26 @@ export function useCanvas(canvasRef: Ref<HTMLCanvasElement | null>) {
     c.restore()
   }
 
-  function redrawAll(elements: DrawElement[]) {
+  function redrawAll(
+    elements: DrawElement[],
+    currentEl?: DrawElement | null,
+    selectedId?: string | null,
+  ) {
+    const store = useCanvasStore()
+    const c = getContext()
     clear()
+    c.save()
+    c.scale(store.zoom, store.zoom)
+    c.translate(-store.panX, -store.panY)
     for (const el of elements) {
       drawElement(el)
     }
+    if (currentEl) drawElement(currentEl)
+    if (selectedId) {
+      const sel = elements.find((e) => e.id === selectedId)
+      if (sel) drawSelectionBox(sel)
+    }
+    c.restore()
   }
 
   function drawSelectionBox(element: DrawElement) {
@@ -99,9 +115,10 @@ export function useCanvas(canvasRef: Ref<HTMLCanvasElement | null>) {
     const rect = canvas.getBoundingClientRect()
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+    const store = useCanvasStore()
     return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
+      x: (clientX - rect.left) / store.zoom + store.panX,
+      y: (clientY - rect.top) / store.zoom + store.panY,
     }
   }
 
