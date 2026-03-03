@@ -5,10 +5,11 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useRoomStore } from '@/stores/roomStore'
 import { useSocket } from '@/composables/useSocket'
-import type { LobbyState, DrawElement } from '@/types'
+import type { LobbyState, DrawElement, ChatMessage } from '@/types'
 import WhiteboardCanvas from '@/components/canvas/WhiteboardCanvas.vue'
 import RoomLobby from '@/components/room/RoomLobby.vue'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
 
 type Phase = 'connecting' | 'lobby' | 'canvas'
 
@@ -23,6 +24,8 @@ const roomId = route.params.roomId as string
 const phase = ref<Phase>('connecting')
 
 const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
+const showStopModal = ref(false)
+const showCloseModal = ref(false)
 
 onMounted(async () => {
   canvasStore.setElements([])
@@ -45,7 +48,12 @@ onMounted(async () => {
 
   socket.value.on('room:stopped', () => {
     roomStore.setRoomStatus('waiting')
+    canvasStore.setElements([])
     phase.value = 'lobby'
+  })
+
+  socket.value.on('room:closed', () => {
+    router.push({ name: 'home' })
   })
 
   socket.value.on('user:joined', (u: { id: string; name: string }) => {
@@ -56,50 +64,65 @@ onMounted(async () => {
     roomStore.removeLobbyParticipant(userId)
   })
 
+  socket.value.on('chat:message', (msg: ChatMessage) => {
+    roomStore.addChatMessage(msg)
+  })
+
+  socket.value.on('chat:history', (msgs: ChatMessage[]) => {
+    roomStore.setChatHistory(msgs)
+  })
+
   socket.value.emit('room:join', roomId)
 })
 
 onUnmounted(() => {
   canvasStore.setElements([])
   roomStore.setLobbyState('', 'waiting', [])
+  roomStore.clearChat()
 })
 
 function goHome() {
   router.push({ name: 'home' })
 }
+
+function confirmStop() {
+  socket.value?.emit('room:stop', roomId)
+  showStopModal.value = false
+}
+
+function confirmClose() {
+  socket.value?.emit('room:close', roomId)
+  showCloseModal.value = false
+}
 </script>
 
 <template>
-  <div class="flex flex-col h-screen overflow-hidden" style="background-color: var(--color-bg)">
+  <div class="flex flex-col h-screen overflow-hidden bg-theme-bg">
     <!-- Header — visible in every phase -->
-    <header
-      class="flex items-center justify-between px-4 py-2 z-20 shrink-0 header-accent-border"
-      style="background-color: var(--color-surface)"
-    >
+    <header class="flex items-center justify-between px-4 py-2 z-20 shrink-0 header-accent-border bg-theme-surface">
       <div class="flex items-center gap-3">
         <AppButton variant="secondary" @click="goHome">← Home</AppButton>
-        <span class="text-xs font-mono" style="color: var(--color-text-muted)">{{ roomId }}</span>
+        <span class="text-xs font-mono text-theme-muted">{{ roomId }}</span>
       </div>
       <div class="flex items-center gap-3">
-        <span
-          v-if="!connected"
-          class="text-xs px-2 py-1"
-          style="color: var(--color-danger); background-color: rgba(255,77,109,0.15); border: 2px solid rgba(255,77,109,0.3)"
-        >Disconnected</span>
+        <span v-if="!connected" class="text-xs px-2 py-1 badge-disconnected">Disconnected</span>
+        <AppButton
+          v-if="phase === 'lobby' && isOwner"
+          variant="danger"
+          @click="showCloseModal = true"
+        >✕ Close Room</AppButton>
         <AppButton
           v-if="phase === 'canvas' && isOwner"
           variant="danger"
-          @click="socket?.emit('room:stop', roomId)"
+          @click="showStopModal = true"
         >■ Stop</AppButton>
-        <span class="text-xs" style="color: var(--color-text-muted)">
-          {{ authStore.user?.displayName }}
-        </span>
+        <span class="text-xs text-theme-muted">{{ authStore.user?.displayName }}</span>
       </div>
     </header>
 
     <!-- Connecting splash -->
     <div v-if="phase === 'connecting'" class="flex-1 flex items-center justify-center">
-      <span class="font-pixel text-[8px]" style="color: var(--color-text-muted)">Connecting…</span>
+      <span class="font-pixel text-[8px] text-theme-muted">Connecting…</span>
     </div>
 
     <!-- Lobby -->
@@ -109,5 +132,37 @@ function goHome() {
     <div v-else class="flex-1 relative overflow-hidden">
       <WhiteboardCanvas :socket="socket" />
     </div>
+
+    <!-- Close room confirmation modal -->
+    <AppModal title="CLOSE ROOM" :open="showCloseModal" @close="showCloseModal = false">
+      <div class="flex flex-col gap-5">
+        <p class="text-theme font-terminal text-sm leading-relaxed">
+          The room will be closed and all participants will be removed.
+        </p>
+        <p class="font-pixel text-[8px] text-theme-danger">
+          This action cannot be undone.
+        </p>
+        <div class="flex gap-3 justify-end">
+          <AppButton variant="secondary" @click="showCloseModal = false">Cancel</AppButton>
+          <AppButton variant="danger" @click="confirmClose">Close Room</AppButton>
+        </div>
+      </div>
+    </AppModal>
+
+    <!-- Stop confirmation modal -->
+    <AppModal title="STOP GAME" :open="showStopModal" @close="showStopModal = false">
+      <div class="flex flex-col gap-5">
+        <p class="text-theme font-terminal text-sm leading-relaxed">
+          The session will end and all drawings will be permanently deleted.
+        </p>
+        <p class="font-pixel text-[8px] text-theme-danger">
+          This action cannot be undone.
+        </p>
+        <div class="flex gap-3 justify-end">
+          <AppButton variant="secondary" @click="showStopModal = false">Cancel</AppButton>
+          <AppButton variant="danger" @click="confirmStop">Stop</AppButton>
+        </div>
+      </div>
+    </AppModal>
   </div>
 </template>

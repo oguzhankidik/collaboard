@@ -32,25 +32,13 @@ function joinRoom(roomId: string) {
 
 <template>
   <div>
-    <div
-      v-if="loading"
-      class="text-xs py-8 text-center"
-      style="color: var(--color-text-muted)"
-    >
+    <div v-if="loading" class="text-xs py-8 text-center text-theme-muted">
       Loading rooms…
     </div>
-    <div
-      v-else-if="error"
-      class="text-xs py-8 text-center"
-      style="color: var(--color-danger)"
-    >
+    <div v-else-if="error" class="text-xs py-8 text-center text-theme-danger">
       {{ error }}
     </div>
-    <div
-      v-else-if="roomStore.rooms.length === 0"
-      class="text-xs py-12 text-center"
-      style="color: var(--color-text-muted)"
-    >
+    <div v-else-if="roomStore.rooms.length === 0" class="text-xs py-12 text-center text-theme-muted">
       No rooms yet. Create one to get started.
     </div>
 
@@ -61,10 +49,10 @@ function joinRoom(roomId: string) {
         class="card-hover flex flex-col gap-2"
         @click="joinRoom(room.id)"
       >
-        <p class="text-sm font-medium" style="color: var(--color-text)">{{ room.name }}</p>
+        <p class="text-sm font-medium text-theme">{{ room.name }}</p>
         <div class="flex items-center justify-between">
           <span class="tag">{{ room.participants.length }} participant(s)</span>
-          <span class="text-xs text-glow-accent" style="color: var(--color-accent)">Join →</span>
+          <span class="text-xs text-glow-accent text-theme-accent">Join →</span>
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import type { Socket } from 'socket.io-client'
 import { useRoomStore } from '@/stores/roomStore'
 import { useAuthStore } from '@/stores/authStore'
 import AppButton from '@/components/ui/AppButton.vue'
+import ChatPanel from '@/components/chat/ChatPanel.vue'
 
 const props = defineProps<{
   roomId: string
@@ -21,28 +22,13 @@ function startRoom() {
 </script>
 
 <template>
-  <div class="flex-1 flex items-center justify-center p-6" style="background-color: var(--color-bg)">
-    <div
-      class="w-full max-w-sm"
-      style="
-        background-color: var(--color-surface);
-        border: 2px solid var(--color-accent);
-        box-shadow: 4px 4px 0 var(--color-accent);
-      "
-    >
+  <div class="flex-1 flex items-start justify-center gap-4 p-6 pt-10 bg-theme-bg">
+    <ChatPanel :socket="socket" :room-id="roomId" class="w-64 self-stretch" />
+    <div class="window-panel w-full max-w-sm">
       <!-- Titlebar -->
-      <div
-        class="flex items-center justify-between px-3"
-        style="
-          background-color: var(--color-accent);
-          color: #fff;
-          font-family: var(--font-pixel);
-          font-size: 8px;
-          height: 32px;
-        "
-      >
+      <div class="window-titlebar px-3 h-8">
         <span>■ WAITING ROOM</span>
-        <span style="font-family: var(--font-terminal); font-size: 12px">
+        <span class="font-terminal text-xs">
           {{ roomStore.lobbyParticipants.length }} / 20
         </span>
       </div>
@@ -57,68 +43,33 @@ function startRoom() {
             class="flex items-center gap-3"
           >
             <!-- Avatar -->
-            <div
-              class="w-8 h-8 flex items-center justify-center shrink-0 avatar-pixel"
-              style="
-                background-color: var(--color-surface-2);
-                font-family: var(--font-pixel);
-                font-size: 8px;
-                color: var(--color-accent);
-              "
-            >
+            <div class="w-8 h-8 flex items-center justify-center shrink-0 avatar-pixel bg-theme-surface-2 font-pixel text-[8px] text-theme-accent">
               {{ p.name.charAt(0).toUpperCase() }}
             </div>
 
             <!-- Name -->
-            <span
-              class="flex-1 text-sm truncate"
-              style="font-family: var(--font-terminal); color: var(--color-text)"
-            >{{ p.name }}</span>
+            <span class="flex-1 text-sm truncate font-terminal text-theme">{{ p.name }}</span>
 
             <!-- Badges -->
             <div class="flex items-center gap-1">
-              <span
-                v-if="p.id === roomStore.roomOwnerId"
-                class="text-xs px-1.5 py-0.5"
-                style="
-                  font-family: var(--font-pixel);
-                  font-size: 7px;
-                  background-color: var(--color-accent-2);
-                  color: #0f0f1a;
-                "
-              >HOST</span>
-              <span
-                v-if="p.id === authStore.user?.uid"
-                class="text-xs px-1.5 py-0.5"
-                style="
-                  font-family: var(--font-pixel);
-                  font-size: 7px;
-                  background-color: var(--color-surface-2);
-                  color: var(--color-text-muted);
-                  border: 1px solid var(--color-border);
-                "
-              >YOU</span>
+              <span v-if="p.id === roomStore.roomOwnerId" class="badge-host">HOST</span>
+              <span v-if="p.id === authStore.user?.uid" class="badge-you">YOU</span>
             </div>
           </div>
 
           <!-- Empty state -->
           <div
             v-if="roomStore.lobbyParticipants.length === 0"
-            class="text-xs py-2"
-            style="color: var(--color-text-muted); font-family: var(--font-terminal)"
+            class="text-xs py-2 text-theme-muted font-terminal"
           >
             No participants yet…
           </div>
         </div>
 
-        <hr style="border-color: var(--color-border)" />
+        <hr class="border-theme" />
 
         <!-- Non-host waiting message -->
-        <p
-          v-if="!isOwner"
-          class="text-xs text-center"
-          style="color: var(--color-text-muted); font-family: var(--font-terminal)"
-        >
+        <p v-if="!isOwner" class="text-xs text-center text-theme-muted font-terminal">
           Waiting for host to start…
         </p>
 

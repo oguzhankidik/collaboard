@@ -151,6 +151,13 @@ export interface SocketEvents {
 - No magic numbers — define constants in `src/constants/`
 - Each component has a single responsibility (SRP)
 - All Socket.io event names must come from the `SocketEvents` interface
+- **All user-facing text must be in English** — never use any other language
+
+### Styling
+- **Never use inline `style="..."` attributes** in Vue templates
+- Use design-token utility classes from `theme.css` (e.g. `text-theme-muted`, `bg-theme-surface`, `badge-host`)
+- For component-specific styles not covered by utilities, add a `<style scoped>` block
+- The only exception is truly dynamic `:style` bindings (e.g. user-selected color: `{ backgroundColor: activeColor }`)
 
 ### Vue Component Order
 ```vue

@@ -9,8 +9,9 @@ import { verifySocketToken, type AuthenticatedSocket } from './middleware/authMi
 import { registerRoomHandlers } from './handlers/roomHandler'
 import { registerDrawingHandlers } from './handlers/drawingHandler'
 import { registerCursorHandlers } from './handlers/cursorHandler'
+import { registerChatHandlers } from './handlers/chatHandler'
 import { RoomModel } from './models/Room'
-import type { Room, RoomStatus } from './types'
+import type { Room, RoomStatus, ChatMessage } from './types'
 
 const PORT = Number(process.env.PORT ?? 3000)
 const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173'
@@ -20,6 +21,7 @@ const MONGODB_URI = process.env.MONGODB_URI ?? ''
 const memoryRooms: Room[] = []
 const lobbyParticipants = new Map<string, Map<string, string>>()
 const roomStatuses = new Map<string, RoomStatus>()
+const roomMessages = new Map<string, ChatMessage[]>()
 const useMemory = () => !MONGODB_URI
 
 // Express app
@@ -88,9 +90,10 @@ io.on('connection', (socket) => {
   const authSocket = socket as AuthenticatedSocket
   console.log(`[socket] connected: ${authSocket.userId} (${authSocket.userName})`)
 
-  registerRoomHandlers(io, authSocket, memoryRooms, lobbyParticipants, roomStatuses, useMemory)
+  registerRoomHandlers(io, authSocket, memoryRooms, lobbyParticipants, roomStatuses, roomMessages, useMemory)
   registerDrawingHandlers(io, authSocket)
   registerCursorHandlers(authSocket)
+  registerChatHandlers(io, authSocket, roomMessages)
 
   socket.on('disconnect', () => {
     console.log(`[socket] disconnected: ${authSocket.userId}`)

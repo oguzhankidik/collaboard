@@ -21,6 +21,13 @@ export interface Room {
   status?: RoomStatus
 }
 
+export interface ChatMessage {
+  userId: string
+  userName: string
+  message: string
+  timestamp: number
+}
+
 export interface DrawElement {
   id: string
   type: ToolType

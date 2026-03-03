@@ -2,7 +2,7 @@ import type { Server } from 'socket.io'
 import type { AuthenticatedSocket } from '../middleware/authMiddleware'
 import { RoomModel } from '../models/Room'
 import { BoardModel } from '../models/Board'
-import type { Room, RoomStatus } from '../types'
+import type { Room, RoomStatus, ChatMessage } from '../types'
 
 const MAX_PARTICIPANTS = 20
 
@@ -12,6 +12,7 @@ export function registerRoomHandlers(
   memoryRooms: Room[],
   lobbyParticipants: Map<string, Map<string, string>>,
   roomStatuses: Map<string, RoomStatus>,
+  roomMessages: Map<string, ChatMessage[]>,
   useMemory: () => boolean,
 ): void {
   socket.on('room:join', async (roomId: string) => {
@@ -66,6 +67,9 @@ export function registerRoomHandlers(
       // Send lobby state to joining user
       const participants = [...names.entries()].map(([id, name]) => ({ id, name }))
       socket.emit('room:lobby', { participants, status, ownerId: room.ownerId })
+
+      // Send chat history to joining user
+      socket.emit('chat:history', roomMessages.get(roomId) ?? [])
 
       // Send current board state
       if (useMemory()) {
@@ -129,9 +133,44 @@ export function registerRoomHandlers(
 
       if (!useMemory()) {
         await RoomModel.updateOne({ id: roomId }, { status: 'waiting' })
+        await BoardModel.updateOne({ roomId }, { $set: { elements: [] } })
       }
 
       io.to(roomId).emit('room:stopped')
+    } catch {
+      // Silently ignore
+    }
+  })
+
+  socket.on('room:close', async (roomId: string) => {
+    try {
+      let ownerId: string | undefined
+
+      if (useMemory()) {
+        const room = memoryRooms.find((r) => r.id === roomId)
+        ownerId = room?.ownerId
+      } else {
+        const doc = await RoomModel.findOne({ id: roomId })
+        ownerId = doc?.ownerId
+      }
+
+      if (!ownerId || ownerId !== socket.userId) return
+
+      // Notify everyone first, then clean up
+      io.to(roomId).emit('room:closed')
+
+      // Remove from in-memory stores
+      lobbyParticipants.delete(roomId)
+      roomStatuses.delete(roomId)
+      roomMessages.delete(roomId)
+
+      if (useMemory()) {
+        const idx = memoryRooms.findIndex((r) => r.id === roomId)
+        if (idx !== -1) memoryRooms.splice(idx, 1)
+      } else {
+        await RoomModel.deleteOne({ id: roomId })
+        await BoardModel.deleteOne({ roomId })
+      }
     } catch {
       // Silently ignore
     }

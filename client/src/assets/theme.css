@@ -273,6 +273,94 @@ body::after {
     border: 2px solid var(--color-accent);
     box-shadow: 2px 2px 0 var(--color-accent), var(--glow-accent);
   }
+
+  /* ── Design token color utilities ── */
+  .bg-theme-bg        { background-color: var(--color-bg); }
+  .bg-theme-surface   { background-color: var(--color-surface); }
+  .bg-theme-surface-2 { background-color: var(--color-surface-2); }
+  .bg-theme-accent    { background-color: var(--color-accent); }
+  .bg-theme-accent-2  { background-color: var(--color-accent-2); }
+
+  .text-theme         { color: var(--color-text); }
+  .text-theme-muted   { color: var(--color-text-muted); }
+  .text-theme-accent  { color: var(--color-accent); }
+  .text-theme-accent-2 { color: var(--color-accent-2); }
+  .text-theme-danger  { color: var(--color-danger); }
+
+  .border-theme       { border-color: var(--color-border); }
+  .border-theme-accent { border-color: var(--color-accent); }
+
+  /* ── Font utilities ── */
+  .font-terminal { font-family: var(--font-terminal); }
+  .font-pixel    { font-family: var(--font-pixel); }
+
+  /* ── Label override (resets global pixel-font label rule) ── */
+  .label-reset {
+    font-family: inherit;
+    font-size: inherit;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  /* ── Alert / status badges ── */
+  .alert-danger {
+    color: var(--color-danger);
+    background-color: rgba(255, 77, 109, 0.1);
+    border: 2px solid rgba(255, 77, 109, 0.3);
+  }
+
+  .badge-disconnected {
+    color: var(--color-danger);
+    background-color: rgba(255, 77, 109, 0.15);
+    border: 2px solid rgba(255, 77, 109, 0.3);
+  }
+
+  /* ── Participant role badges ── */
+  .badge-host {
+    font-family: var(--font-pixel);
+    font-size: 7px;
+    background-color: var(--color-accent-2);
+    color: #0f0f1a;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+
+  .badge-you {
+    font-family: var(--font-pixel);
+    font-size: 7px;
+    background-color: var(--color-surface-2);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+
+  /* ── Window panel (accent-bordered card used in lobby + participant panel) ── */
+  .window-panel {
+    background-color: var(--color-surface);
+    border: 2px solid var(--color-accent);
+    box-shadow: 4px 4px 0 var(--color-accent);
+  }
+
+  .window-titlebar {
+    background-color: var(--color-accent);
+    color: #fff;
+    font-family: var(--font-pixel);
+    font-size: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  /* ── Toolbar vertical separator ── */
+  .toolbar-divider {
+    width: 1px;
+    height: 1.5rem;
+    margin-inline: 0.25rem;
+    background-color: var(--color-border);
+    flex-shrink: 0;
+  }
 }
 
 /* ============================================================

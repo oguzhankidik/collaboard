@@ -10,6 +10,7 @@ import { CURSOR_THROTTLE_MS } from '@/constants'
 import CursorOverlay from './CursorOverlay.vue'
 import ToolBar from './ToolBar.vue'
 import ParticipantPanel from './ParticipantPanel.vue'
+import ChatPanel from '@/components/chat/ChatPanel.vue'
 
 const props = defineProps<{ socket: Socket | null }>()
 
@@ -218,7 +219,7 @@ function handleText(e: MouseEvent) {
 </script>
 
 <template>
-  <div class="relative w-full h-full overflow-hidden" style="background-color: var(--color-bg)">
+  <div class="relative w-full h-full overflow-hidden bg-theme-bg">
     <ToolBar />
 
     <canvas
@@ -241,6 +242,9 @@ function handleText(e: MouseEvent) {
 
     <CursorOverlay :socket="props.socket" />
 
-    <ParticipantPanel />
+    <div class="absolute top-3 right-3 z-30 flex flex-col gap-2 items-end">
+      <ParticipantPanel />
+      <ChatPanel :socket="props.socket" :room-id="roomId" class="w-[180px]" />
+    </div>
   </div>
 </template>

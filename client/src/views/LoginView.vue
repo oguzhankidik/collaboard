@@ -9,18 +9,14 @@ const { loading, error, signInWithGoogle } = useAuth()
   <div class="login-bg min-h-screen flex items-center justify-center">
     <div class="card neon-accent w-full max-w-sm px-8 py-10 text-center">
       <!-- Pixel logo -->
-      <div class="font-pixel text-base mb-6 leading-loose glitch-text" style="color: var(--color-accent)">
-        <span class="text-glow-accent">COLLA</span><span class="text-glow-accent-2" style="color: var(--color-accent-2)">BOARD</span>
+      <div class="font-pixel text-base mb-6 leading-loose glitch-text text-theme-accent">
+        <span class="text-glow-accent">COLLA</span><span class="text-glow-accent-2 text-theme-accent-2">BOARD</span>
       </div>
-      <p class="text-xs mb-8" style="color: var(--color-text-muted)">
+      <p class="text-xs mb-8 text-theme-muted">
         Real-time collaborative whiteboard
       </p>
 
-      <p
-        v-if="error"
-        class="text-xs mb-4 px-3 py-2"
-        style="color: var(--color-danger); background-color: rgba(255,77,109,0.1); border: 2px solid rgba(255,77,109,0.3)"
-      >
+      <p v-if="error" class="text-xs mb-4 px-3 py-2 alert-danger">
         {{ error }}
       </p>
 

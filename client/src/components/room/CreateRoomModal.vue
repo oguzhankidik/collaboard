@@ -51,7 +51,7 @@ async function create() {
   <AppModal title="Create Room" :open="props.open" @close="emit('close')">
     <form class="flex flex-col gap-4" @submit.prevent="create">
       <div>
-        <label class="block text-xs mb-1.5" style="color: var(--color-text-muted)">Room name</label>
+        <label class="block label-reset text-xs mb-1.5 text-theme-muted">Room name</label>
         <input
           v-model="name"
           type="text"
@@ -62,7 +62,7 @@ async function create() {
         />
       </div>
 
-      <p v-if="error" class="text-xs" style="color: var(--color-danger)">{{ error }}</p>
+      <p v-if="error" class="text-xs text-theme-danger">{{ error }}</p>
 
       <div class="flex justify-end gap-2">
         <AppButton variant="secondary" type="button" @click="emit('close')">Cancel</AppButton>

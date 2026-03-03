@@ -158,13 +158,12 @@ const selectDropdownStyle = computed(() => ({
     </button>
 
     <!-- Divider -->
-    <div class="w-px h-6 mx-1" style="background-color: var(--color-border)" />
+    <div class="toolbar-divider" />
 
     <!-- Color picker -->
-    <label class="btn-icon cursor-pointer" title="Color" style="font-family: inherit; font-size: inherit; text-transform: none; letter-spacing: normal;">
+    <label class="btn-icon cursor-pointer label-reset" title="Color">
       <span
-        class="w-4 h-4 border"
-        style="border-color: var(--color-border)"
+        class="w-4 h-4 border border-theme"
         :style="{ backgroundColor: canvasStore.activeColor }"
       />
       <input
@@ -186,7 +185,7 @@ const selectDropdownStyle = computed(() => ({
     </select>
 
     <!-- Divider -->
-    <div class="w-px h-6 mx-1" style="background-color: var(--color-border)" />
+    <div class="toolbar-divider" />
 
     <!-- Undo -->
     <button
@@ -225,7 +224,7 @@ const selectDropdownStyle = computed(() => ({
     </button>
 
     <!-- Divider -->
-    <div class="w-px h-6 mx-1" style="background-color: var(--color-border)" />
+    <div class="toolbar-divider" />
 
     <!-- Export PNG -->
     <button
