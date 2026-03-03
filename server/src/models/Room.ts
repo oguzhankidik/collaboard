@@ -7,6 +7,7 @@ const roomSchema = new Schema(
     ownerId: { type: String, required: true },
     participants: { type: [String], default: [] },
     status: { type: String, enum: ['waiting', 'started'], default: 'waiting' },
+    isPrivate: { type: Boolean, default: false },
   },
   { timestamps: true },
 )

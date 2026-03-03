@@ -19,6 +19,7 @@ export interface Room {
   participants: string[]
   createdAt: string
   status?: RoomStatus
+  isPrivate: boolean
 }
 
 export interface ChatMessage {

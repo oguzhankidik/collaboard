@@ -15,6 +15,7 @@ const roomStore = useRoomStore()
 const authStore = useAuthStore()
 
 const name = ref('')
+const isPrivate = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
 
@@ -34,6 +35,7 @@ async function create() {
       body: JSON.stringify({
         name: name.value.trim(),
         ownerId: authStore.user?.uid,
+        isPrivate: isPrivate.value,
       }),
     })
 
@@ -55,7 +57,7 @@ async function create() {
   <AppModal title="Create Room" :open="props.open" @close="emit('close')">
     <form class="flex flex-col gap-4" @submit.prevent="create">
       <div>
-        <label class="block label-reset text-xs mb-1.5 text-theme-muted">Room name</label>
+        <label class="block label-reset text-sm mb-1.5 text-theme-muted">Room name</label>
         <input
           v-model="name"
           type="text"
@@ -64,6 +66,30 @@ async function create() {
           class="input-field"
           autofocus
         />
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <div class="flex gap-2">
+          <button
+            type="button"
+            :class="['flex-1 py-1.5 text-xs font-terminal border transition-colors',
+              !isPrivate ? 'border-theme-accent text-theme-accent bg-theme-surface-2' : 'border-theme text-theme-muted bg-transparent']"
+            @click="isPrivate = false"
+          >
+            ◉ Public
+          </button>
+          <button
+            type="button"
+            :class="['flex-1 py-1.5 text-xs font-terminal border transition-colors',
+              isPrivate ? 'border-theme-accent text-theme-accent bg-theme-surface-2' : 'border-theme text-theme-muted bg-transparent']"
+            @click="isPrivate = true"
+          >
+            ◎ Private
+          </button>
+        </div>
+        <p class="text-sm text-theme-muted font-terminal">
+          {{ isPrivate ? 'Only people with the link can join.' : 'Visible to everyone in the room list.' }}
+        </p>
       </div>
 
       <p v-if="error" class="text-xs text-theme-danger">{{ error }}</p>

@@ -36,11 +36,11 @@ app.get('/health', (_req, res) => {
 // REST: list rooms
 app.get('/rooms', async (_req, res) => {
   if (useMemory()) {
-    res.json([...memoryRooms].reverse())
+    res.json([...memoryRooms].filter(r => !r.isPrivate).reverse())
     return
   }
   try {
-    const rooms = await RoomModel.find().sort({ createdAt: -1 }).limit(50)
+    const rooms = await RoomModel.find({ isPrivate: { $ne: true } }).sort({ createdAt: -1 }).limit(50)
     res.json(rooms)
   } catch {
     res.status(500).json({ error: 'Failed to fetch rooms' })
@@ -51,7 +51,7 @@ app.get('/rooms', async (_req, res) => {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 app.post('/rooms', async (req, res) => {
-  const { name, ownerId } = req.body as { name?: string; ownerId?: string }
+  const { name, ownerId, isPrivate = false } = req.body as { name?: string; ownerId?: string; isPrivate?: boolean }
   if (!name || !ownerId) {
     res.status(400).json({ error: 'name and ownerId are required' })
     return
@@ -70,6 +70,7 @@ app.post('/rooms', async (req, res) => {
       participants: [],
       createdAt: new Date().toISOString(),
       status: 'waiting' as RoomStatus,
+      isPrivate,
     }
     memoryRooms.push(room)
     res.status(201).json(room)
@@ -77,7 +78,7 @@ app.post('/rooms', async (req, res) => {
   }
 
   try {
-    const room = await RoomModel.create({ id: nanoid(), name, ownerId, participants: [] })
+    const room = await RoomModel.create({ id: nanoid(), name, ownerId, participants: [], isPrivate })
     res.status(201).json(room)
   } catch {
     res.status(500).json({ error: 'Failed to create room' })
