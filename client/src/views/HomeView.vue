@@ -13,29 +13,38 @@ const showCreateModal = ref(false)
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen" style="background-color: var(--color-bg)">
     <!-- Header -->
-    <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <span class="text-xl">🎨</span>
-        <span class="font-semibold text-gray-900">Collaboard</span>
+    <header
+      class="px-6 py-3 flex items-center justify-between header-accent-border"
+      style="background-color: var(--color-surface)"
+    >
+      <div class="font-pixel text-xs glitch-text" style="color: var(--color-accent)">
+        <span class="text-glow-accent">COLLA</span><span class="text-glow-accent-2" style="color: var(--color-accent-2)">BOARD</span>
       </div>
       <div class="flex items-center gap-3">
-        <span class="text-sm text-gray-600">{{ authStore.user?.displayName }}</span>
+        <!-- User avatar initial -->
+        <div
+          class="w-7 h-7 flex items-center justify-center text-xs font-bold select-none avatar-pixel"
+          style="background-color: var(--color-accent); color: #fff"
+        >
+          {{ authStore.user?.displayName?.charAt(0).toUpperCase() ?? '?' }}
+        </div>
+        <span class="text-xs" style="color: var(--color-text-muted)">
+          {{ authStore.user?.displayName }}
+        </span>
         <AppButton variant="secondary" @click="logout">Sign out</AppButton>
       </div>
     </header>
 
     <!-- Main -->
-    <main class="max-w-2xl mx-auto px-6 py-10">
+    <main class="max-w-3xl mx-auto px-6 py-10">
       <div class="flex items-center justify-between mb-6">
-        <h2 class="text-lg font-semibold text-gray-900">Rooms</h2>
+        <h2 class="font-pixel text-[10px]" style="color: var(--color-text)">Rooms</h2>
         <AppButton variant="primary" @click="showCreateModal = true">+ New room</AppButton>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <RoomList />
-      </div>
+      <RoomList />
     </main>
 
     <CreateRoomModal :open="showCreateModal" @close="showCreateModal = false" />

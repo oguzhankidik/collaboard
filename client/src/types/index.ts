@@ -1,5 +1,7 @@
 export type ToolType = 'pen' | 'rect' | 'circle' | 'arrow' | 'text' | 'select'
 
+export type RoomStatus = 'waiting' | 'started'
+
 export interface Point {
   x: number
   y: number
@@ -23,12 +25,24 @@ export interface RemoteCursor {
   position: Point
 }
 
+export interface Participant {
+  id: string
+  name: string
+}
+
+export interface LobbyState {
+  participants: Participant[]
+  status: RoomStatus
+  ownerId: string
+}
+
 export interface Room {
   id: string
   name: string
   ownerId: string
   participants: string[]
   createdAt: string
+  status?: RoomStatus
 }
 
 export interface SocketEvents {
@@ -39,11 +53,16 @@ export interface SocketEvents {
   'cursor:move': (position: Point) => void
   'room:join': (roomId: string) => void
   'room:leave': (roomId: string) => void
+  'room:start': (roomId: string) => void
+  'room:stop': (roomId: string) => void
 
   // Server → Client
   'draw:remote': (element: DrawElement) => void
   'cursor:remote': (cursor: RemoteCursor) => void
   'room:state': (elements: DrawElement[]) => void
+  'room:lobby': (state: LobbyState) => void
+  'room:started': () => void
+  'room:stopped': () => void
   'user:joined': (user: { id: string; name: string }) => void
   'user:left': (userId: string) => void
 }

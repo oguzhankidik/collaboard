@@ -33,8 +33,8 @@ onUnmounted(() => {
     <div
       v-for="cursor in cursors.values()"
       :key="cursor.userId"
-      class="absolute flex items-start gap-1 transition-transform duration-75"
-      :style="{ transform: `translate(${cursor.position.x}px, ${cursor.position.y}px)` }"
+      class="absolute flex items-start gap-1"
+      :style="{ transform: `translate(${cursor.position.x}px, ${cursor.position.y}px)`, transition: 'transform 80ms linear' }"
     >
       <!-- Cursor arrow -->
       <svg width="16" height="16" viewBox="0 0 16 16" class="-translate-y-px">
@@ -47,7 +47,7 @@ onUnmounted(() => {
       </svg>
       <!-- Name label -->
       <span
-        class="text-xs text-white px-1 rounded whitespace-nowrap mt-3"
+        class="text-xs text-white px-1 whitespace-nowrap mt-3"
         :style="{ backgroundColor: cursor.color }"
       >
         {{ cursor.userName }}

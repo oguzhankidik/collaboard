@@ -32,29 +32,48 @@ function joinRoom(roomId: string) {
 
 <template>
   <div>
-    <div v-if="loading" class="text-sm text-gray-500 py-4 text-center">Loading rooms…</div>
-    <div v-else-if="error" class="text-sm text-red-600 py-4 text-center">{{ error }}</div>
-    <div v-else-if="roomStore.rooms.length === 0" class="text-sm text-gray-400 py-8 text-center">
+    <div
+      v-if="loading"
+      class="text-xs py-8 text-center"
+      style="color: var(--color-text-muted)"
+    >
+      Loading rooms…
+    </div>
+    <div
+      v-else-if="error"
+      class="text-xs py-8 text-center"
+      style="color: var(--color-danger)"
+    >
+      {{ error }}
+    </div>
+    <div
+      v-else-if="roomStore.rooms.length === 0"
+      class="text-xs py-12 text-center"
+      style="color: var(--color-text-muted)"
+    >
       No rooms yet. Create one to get started.
     </div>
 
-    <ul v-else class="divide-y divide-gray-100">
-      <li
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div
         v-for="room in roomStore.rooms"
         :key="room.id"
-        class="flex items-center justify-between py-3 px-1 hover:bg-gray-50 rounded-lg transition-colors"
+        class="card-hover flex flex-col gap-2"
+        @click="joinRoom(room.id)"
       >
-        <div>
-          <p class="text-sm font-medium text-gray-900">{{ room.name }}</p>
-          <p class="text-xs text-gray-400">{{ room.participants.length }} participant(s)</p>
+        <p class="text-sm font-medium" style="color: var(--color-text)">{{ room.name }}</p>
+        <div class="flex items-center justify-between">
+          <span class="tag">{{ room.participants.length }} participant(s)</span>
+          <span class="text-xs text-glow-accent" style="color: var(--color-accent)">Join →</span>
         </div>
-        <button
-          class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-          @click="joinRoom(room.id)"
-        >
-          Join →
-        </button>
-      </li>
-    </ul>
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.card-hover:hover .tag {
+  border-color: var(--color-accent-2);
+  color: var(--color-accent-2);
+}
+</style>

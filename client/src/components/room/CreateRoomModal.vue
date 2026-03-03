@@ -51,18 +51,18 @@ async function create() {
   <AppModal title="Create Room" :open="props.open" @close="emit('close')">
     <form class="flex flex-col gap-4" @submit.prevent="create">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Room name</label>
+        <label class="block text-xs mb-1.5" style="color: var(--color-text-muted)">Room name</label>
         <input
           v-model="name"
           type="text"
           maxlength="100"
           placeholder="My whiteboard"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          class="input-field"
           autofocus
         />
       </div>
 
-      <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
+      <p v-if="error" class="text-xs" style="color: var(--color-danger)">{{ error }}</p>
 
       <div class="flex justify-end gap-2">
         <AppButton variant="secondary" type="button" @click="emit('close')">Cancel</AppButton>

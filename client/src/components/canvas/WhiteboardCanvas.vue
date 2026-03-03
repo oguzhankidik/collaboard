@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import type { Socket } from 'socket.io-client'
 import type { DrawElement, Point } from '@/types'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useCanvas, hitTestElement } from '@/composables/useCanvas'
-import { useSocket } from '@/composables/useSocket'
 import { CURSOR_THROTTLE_MS } from '@/constants'
 import CursorOverlay from './CursorOverlay.vue'
 import ToolBar from './ToolBar.vue'
+import ParticipantPanel from './ParticipantPanel.vue'
+
+const props = defineProps<{ socket: Socket | null }>()
 
 const route = useRoute()
 const roomId = route.params.roomId as string
@@ -17,7 +20,6 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasStore = useCanvasStore()
 const authStore = useAuthStore()
 const { redrawAll, drawElement, canvasPoint, drawSelectionBox } = useCanvas(canvasRef)
-const { socket, connected, connect } = useSocket()
 
 // Drawing state
 const isDrawing = ref(false)
@@ -50,19 +52,8 @@ function scheduleRender() {
 }
 
 // --- Socket setup ---
-onMounted(async () => {
-  await connect()
-
-  if (!socket.value) return
-
-  socket.value.emit('room:join', roomId)
-
-  socket.value.on('room:state', (elements: DrawElement[]) => {
-    canvasStore.setElements(elements)
-    redrawAll(canvasStore.elements)
-  })
-
-  socket.value.on('draw:remote', (element: DrawElement) => {
+onMounted(() => {
+  props.socket?.on('draw:remote', (element: DrawElement) => {
     canvasStore.updateElement(element)
     redrawAll(canvasStore.elements)
   })
@@ -125,7 +116,7 @@ function onPointerDown(e: MouseEvent) {
 
   isDrawing.value = true
   currentElement.value = element
-  socket.value?.emit('draw:start', element)
+  props.socket?.emit('draw:start', element)
 }
 
 function onPointerMove(e: MouseEvent) {
@@ -135,7 +126,7 @@ function onPointerMove(e: MouseEvent) {
   // Cursor broadcast — always throttled
   if (now - lastCursorEmit >= CURSOR_THROTTLE_MS) {
     lastCursorEmit = now
-    socket.value?.emit('cursor:move', point)
+    props.socket?.emit('cursor:move', point)
   }
 
   if (canvasStore.activeTool === 'select') {
@@ -173,7 +164,7 @@ function onPointerMove(e: MouseEvent) {
   // Draw update — throttled to 16ms
   if (now - lastDrawEmit >= 16) {
     lastDrawEmit = now
-    socket.value?.emit('draw:update', { ...el, points: [...el.points] })
+    props.socket?.emit('draw:update', { ...el, points: [...el.points] })
   }
 }
 
@@ -186,7 +177,7 @@ function onPointerUp() {
   if (canvasStore.activeTool === 'select') {
     if (isDragging.value && selectedElementId.value && hasMovedDuringDrag) {
       const el = canvasStore.elements.find((e) => e.id === selectedElementId.value)
-      if (el) socket.value?.emit('draw:end', el)
+      if (el) props.socket?.emit('draw:end', el)
     }
     isDragging.value = false
     dragStart = null
@@ -201,7 +192,7 @@ function onPointerUp() {
   isDrawing.value = false
   currentElement.value = null
   canvasStore.addElement(el)
-  socket.value?.emit('draw:end', el)
+  props.socket?.emit('draw:end', el)
 }
 
 function handleText(e: MouseEvent) {
@@ -222,12 +213,12 @@ function handleText(e: MouseEvent) {
 
   canvasStore.addElement(element)
   redrawAll(canvasStore.elements)
-  socket.value?.emit('draw:end', element)
+  props.socket?.emit('draw:end', element)
 }
 </script>
 
 <template>
-  <div class="relative w-full h-full bg-white overflow-hidden">
+  <div class="relative w-full h-full overflow-hidden" style="background-color: var(--color-bg)">
     <ToolBar />
 
     <canvas
@@ -248,10 +239,8 @@ function handleText(e: MouseEvent) {
       @mouseleave="onPointerUp"
     />
 
-    <CursorOverlay :socket="socket" />
+    <CursorOverlay :socket="props.socket" />
 
-    <div v-if="!connected" class="absolute top-2 right-2 text-xs text-red-500 bg-red-50 px-2 py-1 rounded">
-      Disconnected
-    </div>
+    <ParticipantPanel />
   </div>
 </template>

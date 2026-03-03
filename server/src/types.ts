@@ -1,8 +1,15 @@
 export type ToolType = 'pen' | 'rect' | 'circle' | 'arrow' | 'text' | 'select'
 
+export type RoomStatus = 'waiting' | 'started'
+
 export interface Point {
   x: number
   y: number
+}
+
+export interface Participant {
+  id: string
+  name: string
 }
 
 export interface Room {
@@ -11,6 +18,7 @@ export interface Room {
   ownerId: string
   participants: string[]
   createdAt: string
+  status?: RoomStatus
 }
 
 export interface DrawElement {

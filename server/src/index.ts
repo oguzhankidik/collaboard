@@ -10,7 +10,7 @@ import { registerRoomHandlers } from './handlers/roomHandler'
 import { registerDrawingHandlers } from './handlers/drawingHandler'
 import { registerCursorHandlers } from './handlers/cursorHandler'
 import { RoomModel } from './models/Room'
-import type { Room } from './types'
+import type { Room, RoomStatus } from './types'
 
 const PORT = Number(process.env.PORT ?? 3000)
 const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173'
@@ -18,6 +18,8 @@ const MONGODB_URI = process.env.MONGODB_URI ?? ''
 
 // In-memory fallback used when MongoDB is not configured
 const memoryRooms: Room[] = []
+const lobbyParticipants = new Map<string, Map<string, string>>()
+const roomStatuses = new Map<string, RoomStatus>()
 const useMemory = () => !MONGODB_URI
 
 // Express app
@@ -58,6 +60,7 @@ app.post('/rooms', async (req, res) => {
       ownerId,
       participants: [],
       createdAt: new Date().toISOString(),
+      status: 'waiting' as RoomStatus,
     }
     memoryRooms.push(room)
     res.status(201).json(room)
@@ -85,7 +88,7 @@ io.on('connection', (socket) => {
   const authSocket = socket as AuthenticatedSocket
   console.log(`[socket] connected: ${authSocket.userId} (${authSocket.userName})`)
 
-  registerRoomHandlers(io, authSocket)
+  registerRoomHandlers(io, authSocket, memoryRooms, lobbyParticipants, roomStatuses, useMemory)
   registerDrawingHandlers(io, authSocket)
   registerCursorHandlers(authSocket)
 
