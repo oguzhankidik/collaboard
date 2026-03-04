@@ -3,7 +3,7 @@ import type { AuthenticatedSocket } from '../middleware/authMiddleware'
 import type { DrawElement } from '../types'
 import { BoardModel } from '../models/Board'
 
-export function registerDrawingHandlers(io: Server, socket: AuthenticatedSocket): void {
+export function registerDrawingHandlers(_io: Server, socket: AuthenticatedSocket): void {
   socket.on('draw:start', (element: DrawElement) => {
     // Broadcast to all others in the same rooms
     for (const roomId of socket.rooms) {

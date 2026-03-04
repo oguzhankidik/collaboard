@@ -99,6 +99,7 @@ export function registerRoomHandlers(
             participants: doc.participants,
             createdAt: doc.createdAt?.toISOString() ?? '',
             status: (doc.status as RoomStatus) ?? 'waiting',
+            isPrivate: (doc.isPrivate as boolean) ?? false,
           }
         }
       }
