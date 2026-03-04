@@ -243,26 +243,6 @@ collaboard/
         │   └── authMiddleware.ts  # Firebase token verification per connection
         └── index.ts               # Express + Socket.io bootstrap, REST /rooms
 ```
-
----
-
-## Deployment
-
-### Frontend → Vercel
-
-1. Import the repository in Vercel
-2. Set **Root Directory** to `client`
-3. Add all `VITE_*` environment variables in the Vercel dashboard
-4. Deploy — Vercel auto-detects Vite
-
-### Backend → Railway
-
-1. Create a new Railway project linked to the repository
-2. Set **Root Directory** to `server`
-3. Set the start command to `pnpm start`
-4. Add all server environment variables
-5. Set `CLIENT_URL` to your Vercel deployment URL (required for CORS)
-
 ---
 
 ## License
