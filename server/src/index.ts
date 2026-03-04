@@ -14,8 +14,7 @@ import { RoomModel } from './models/Room'
 import type { Room, RoomStatus, ChatMessage } from './types'
 
 const PORT = Number(process.env.PORT ?? 3000)
-//const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173'
-//const ALLOWED_ORIGINS = [CLIENT_URL, 'http://localhost:5173'].filter(Boolean)
+const CLIENT_URL = (process.env.CLIENT_URL ?? 'http://localhost:5173').replace(/\/$/, '')
 const MONGODB_URI = process.env.MONGODB_URI ?? ''
 
 // In-memory fallback used when MongoDB is not configured
@@ -27,7 +26,7 @@ const useMemory = () => !MONGODB_URI
 
 // Express app
 const app = express()
-app.use(cors({ origin: true, credentials: true }))
+app.use(cors({ origin: [CLIENT_URL, 'http://localhost:5173'], credentials: true }))
 app.use(express.json())
 
 app.get('/health', (_req, res) => {
@@ -89,7 +88,7 @@ app.post('/rooms', async (req, res) => {
 // HTTP + Socket.io server
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
-  cors: { origin: true, methods: ['GET', 'POST'] },
+  cors: { origin: [CLIENT_URL, 'http://localhost:5173'], methods: ['GET', 'POST'] },
 })
 
 // Auth middleware on every socket connection
