@@ -6,6 +6,7 @@ import cors from 'cors'
 import mongoose from 'mongoose'
 import { nanoid } from 'nanoid'
 import { verifySocketToken, type AuthenticatedSocket } from './middleware/authMiddleware'
+import { requireAuth, type AuthRequest } from './middleware/requireAuth'
 import { registerRoomHandlers } from './handlers/roomHandler'
 import { registerDrawingHandlers } from './handlers/drawingHandler'
 import { registerCursorHandlers } from './handlers/cursorHandler'
@@ -14,7 +15,9 @@ import { RoomModel } from './models/Room'
 import type { Room, RoomStatus, ChatMessage } from './types'
 
 const PORT = Number(process.env.PORT ?? 3000)
+const IS_DEV = process.env.NODE_ENV !== 'production'
 const CLIENT_URL = (process.env.CLIENT_URL ?? 'http://localhost:5173').replace(/\/$/, '')
+const ALLOWED_ORIGINS = IS_DEV ? [CLIENT_URL, 'http://localhost:5173'] : [CLIENT_URL]
 const MONGODB_URI = process.env.MONGODB_URI ?? ''
 
 // In-memory fallback used when MongoDB is not configured
@@ -26,7 +29,7 @@ const useMemory = () => !MONGODB_URI
 
 // Express app
 const app = express()
-app.use(cors({ origin: [CLIENT_URL, 'http://localhost:5173'], credentials: true }))
+app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }))
 app.use(express.json())
 
 app.get('/health', (_req, res) => {
@@ -47,25 +50,22 @@ app.get('/rooms', async (_req, res) => {
   }
 })
 
-// REST: create room
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// REST: create room (requires Firebase auth)
+app.post('/rooms', requireAuth, async (req, res) => {
+  const ownerId = (req as AuthRequest).uid
+  const { name, isPrivate = false } = req.body as { name?: string; isPrivate?: boolean }
 
-app.post('/rooms', async (req, res) => {
-  const { name, ownerId, isPrivate = false } = req.body as { name?: string; ownerId?: string; isPrivate?: boolean }
-  if (!name || !ownerId) {
-    res.status(400).json({ error: 'name and ownerId are required' })
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    res.status(400).json({ error: 'name is required' })
     return
   }
 
-  if (UUID_RE.test(ownerId)) {
-    res.status(403).json({ error: 'Guest users cannot create rooms' })
-    return
-  }
+  const trimmedName = name.trim().slice(0, 100)
 
   if (useMemory()) {
     const room: Room = {
       id: nanoid(),
-      name,
+      name: trimmedName,
       ownerId,
       participants: [],
       createdAt: new Date().toISOString(),
@@ -78,7 +78,7 @@ app.post('/rooms', async (req, res) => {
   }
 
   try {
-    const room = await RoomModel.create({ id: nanoid(), name, ownerId, participants: [], isPrivate })
+    const room = await RoomModel.create({ id: nanoid(), name: trimmedName, ownerId, participants: [], isPrivate })
     res.status(201).json(room)
   } catch {
     res.status(500).json({ error: 'Failed to create room' })
@@ -88,7 +88,7 @@ app.post('/rooms', async (req, res) => {
 // HTTP + Socket.io server
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
-  cors: { origin: [CLIENT_URL, 'http://localhost:5173'], methods: ['GET', 'POST'] },
+  cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] },
 })
 
 // Auth middleware on every socket connection

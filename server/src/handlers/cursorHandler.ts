@@ -1,5 +1,9 @@
 import type { AuthenticatedSocket } from '../middleware/authMiddleware'
 import type { Point } from '../types'
+import { RateLimiter } from '../lib/rateLimiter'
+
+// Max 40 cursor events per second per user (client throttles to 30ms already)
+const cursorLimiter = new RateLimiter(40, 1000)
 
 // Cursor colour palette — deterministic per userId
 const CURSOR_COLORS = [
@@ -17,7 +21,10 @@ function colorForUser(userId: string): string {
 }
 
 export function registerCursorHandlers(socket: AuthenticatedSocket): void {
+  socket.on('disconnect', () => cursorLimiter.remove(socket.userId))
+
   socket.on('cursor:move', (position: Point) => {
+    if (!cursorLimiter.allow(socket.userId)) return
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
       socket.to(roomId).emit('cursor:remote', {

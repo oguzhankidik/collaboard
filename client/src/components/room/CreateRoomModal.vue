@@ -29,12 +29,15 @@ async function create() {
   loading.value = true
   error.value = null
   try {
+    const token = await (authStore.user as import('firebase/auth').User)?.getIdToken()
     const res = await fetch(`${import.meta.env.VITE_SOCKET_URL}/rooms`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({
         name: name.value.trim(),
-        ownerId: authStore.user?.uid,
         isPrivate: isPrivate.value,
       }),
     })
