@@ -35,8 +35,8 @@ export function useAuth() {
     if (!trimmed) return
     loading.value = true
     const guestId = crypto.randomUUID()
-    localStorage.setItem('guest_id', guestId)
-    localStorage.setItem('guest_name', trimmed)
+    sessionStorage.setItem('guest_id', guestId)
+    sessionStorage.setItem('guest_name', trimmed)
     authStore.setUser({ uid: guestId, displayName: trimmed, isGuest: true })
     loading.value = false
     await router.push({ name: 'home' })
@@ -47,8 +47,8 @@ export function useAuth() {
     error.value = null
     try {
       if (isGuestUser(authStore.user)) {
-        localStorage.removeItem('guest_id')
-        localStorage.removeItem('guest_name')
+        sessionStorage.removeItem('guest_id')
+        sessionStorage.removeItem('guest_name')
         authStore.setUser(null)
         await router.push({ name: 'login' })
       } else {

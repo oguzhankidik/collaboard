@@ -16,8 +16,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => user.value !== null)
 
   function init(): Promise<void> {
-    const gid = localStorage.getItem('guest_id')
-    const gname = localStorage.getItem('guest_name')
+    const gid = sessionStorage.getItem('guest_id')
+    const gname = sessionStorage.getItem('guest_name')
     if (gid && gname) {
       user.value = { uid: gid, displayName: gname, isGuest: true }
     }
@@ -26,8 +26,8 @@ export const useAuthStore = defineStore('auth', () => {
       onAuthStateChanged(auth, (firebaseUser) => {
         if (firebaseUser) {
           user.value = firebaseUser
-          localStorage.removeItem('guest_id')
-          localStorage.removeItem('guest_name')
+          sessionStorage.removeItem('guest_id')
+          sessionStorage.removeItem('guest_name')
         } else if (!isGuestUser(user.value)) {
           user.value = null
         }

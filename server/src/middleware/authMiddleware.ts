@@ -13,8 +13,12 @@ export async function verifySocketToken(
   socket: Socket,
   next: (err?: Error) => void,
 ): Promise<void> {
-  // Skip auth in dev mode when no Firebase credentials are configured
+  // In production, refuse connections if Firebase credentials are missing
   if (!hasCredentials) {
+    if (process.env.NODE_ENV === 'production') {
+      next(new Error('Server misconfiguration: auth credentials not set'))
+      return
+    }
     const authSocket = socket as AuthenticatedSocket
     authSocket.userId = socket.id
     authSocket.userName = 'Dev User'
