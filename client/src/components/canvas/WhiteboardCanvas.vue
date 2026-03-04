@@ -20,7 +20,7 @@ const roomId = route.params.roomId as string
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasStore = useCanvasStore()
 const authStore = useAuthStore()
-const { redrawAll, canvasPoint, drawSelectionBox } = useCanvas(canvasRef)
+const { redrawAll, canvasPoint } = useCanvas(canvasRef)
 
 // Drawing state
 const isDrawing = ref(false)

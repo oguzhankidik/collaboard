@@ -4,7 +4,6 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useRoomStore } from '@/stores/roomStore'
 import { STROKE_WIDTHS, ERASER_SIZES, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } from '@/constants'
-import type { ToolType } from '@/types'
 
 const emit = defineEmits<{ 'clear-board': [] }>()
 
@@ -14,14 +13,6 @@ const roomStore = useRoomStore()
 
 const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
 
-const tools: { type: ToolType; label: string }[] = [
-  { type: 'pen',    label: 'Pen' },
-  { type: 'rect',   label: 'Rectangle' },
-  { type: 'circle', label: 'Circle' },
-  { type: 'arrow',  label: 'Arrow' },
-  { type: 'text',   label: 'Text' },
-  { type: 'select', label: 'Select' },
-]
 
 function exportPng() {
   const canvas = document.querySelector('canvas')

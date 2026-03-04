@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
 import { nanoid } from 'nanoid'
-import type { DrawElement, Point } from '@/types'
+import type { DrawElement } from '@/types'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCanvas } from './useCanvas'
 import { DRAW_UPDATE_THROTTLE_MS } from '@/constants'

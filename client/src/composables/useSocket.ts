@@ -1,9 +1,9 @@
-import { ref, onUnmounted } from 'vue'
+import { shallowRef, ref, onUnmounted } from 'vue'
 import type { Socket } from 'socket.io-client'
 import { getSocket, disconnectSocket } from '@/lib/socket'
 
 export function useSocket() {
-  const socket = ref<Socket | null>(null)
+  const socket = shallowRef<Socket | null>(null)
   const connected = ref(false)
   const error = ref<string | null>(null)
 

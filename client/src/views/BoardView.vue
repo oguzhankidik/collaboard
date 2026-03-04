@@ -112,9 +112,6 @@ function confirmClose() {
   showCloseModal.value = false
 }
 
-function handleClearBoard() {
-  socket.value?.emit('board:clear', roomId)
-}
 </script>
 
 <template>
