@@ -14,8 +14,8 @@ import { RoomModel } from './models/Room'
 import type { Room, RoomStatus, ChatMessage } from './types'
 
 const PORT = Number(process.env.PORT ?? 3000)
-const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173'
-const ALLOWED_ORIGINS = [CLIENT_URL, 'http://localhost:5173'].filter(Boolean)
+//const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173'
+//const ALLOWED_ORIGINS = [CLIENT_URL, 'http://localhost:5173'].filter(Boolean)
 const MONGODB_URI = process.env.MONGODB_URI ?? ''
 
 // In-memory fallback used when MongoDB is not configured
