@@ -36,6 +36,11 @@ let dragStart: Point | null = null
 let dragOriginPoints: Point[] = []
 let hasMovedDuringDrag = false
 
+// Inline text input state
+const textInput = ref<{ x: number; y: number; worldPoint: { x: number; y: number } } | null>(null)
+const textInputRef = ref<HTMLTextAreaElement | null>(null)
+const textInputValue = ref('')
+
 // Pan state
 const isPanning = ref(false)
 const panStartScreen = ref<Point>({ x: 0, y: 0 })
@@ -240,14 +245,30 @@ function onPointerUp() {
 }
 
 function handleText(e: MouseEvent) {
-  const text = window.prompt('Enter text:')
-  if (!text) return
+  const rect = canvasRef.value!.getBoundingClientRect()
+  const screenX = e.clientX - rect.left
+  const screenY = e.clientY - rect.top
+  const worldPoint = canvasPoint(e)
 
-  const point = canvasPoint(e)
+  textInputValue.value = ''
+  textInput.value = { x: screenX, y: screenY, worldPoint }
+
+  // Focus the textarea on next tick after it mounts
+  setTimeout(() => textInputRef.value?.focus(), 0)
+}
+
+function commitTextFromInput() {
+  const text = textInputValue.value.trim()
+  const saved = textInput.value
+  textInput.value = null
+  textInputValue.value = ''
+
+  if (!text || !saved) return
+
   const element: DrawElement = {
     id: crypto.randomUUID(),
     type: 'text',
-    points: [point],
+    points: [saved.worldPoint],
     color: canvasStore.activeColor,
     strokeWidth: canvasStore.activeStrokeWidth,
     text,
@@ -258,6 +279,18 @@ function handleText(e: MouseEvent) {
   canvasStore.addElement(element)
   redrawAll(canvasStore.elements)
   props.socket?.emit('draw:end', element)
+}
+
+function onTextKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    textInput.value = null
+    textInputValue.value = ''
+    return
+  }
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    commitTextFromInput()
+  }
 }
 </script>
 
@@ -290,6 +323,24 @@ function handleText(e: MouseEvent) {
       @wheel.prevent="onWheel"
     />
 
+    <!-- Inline text input -->
+    <textarea
+      v-if="textInput"
+      ref="textInputRef"
+      v-model="textInputValue"
+      class="text-input-overlay"
+      :style="{
+        left: textInput.x + 'px',
+        top: textInput.y + 'px',
+        color: canvasStore.activeColor,
+        fontSize: (canvasStore.activeStrokeWidth * 8 + 12) + 'px',
+      }"
+      rows="1"
+      placeholder="Type here…"
+      @keydown="onTextKeydown"
+      @blur="commitTextFromInput"
+    />
+
     <CursorOverlay :socket="props.socket" />
 
     <div class="absolute top-3 right-3 z-30 flex flex-col gap-2 items-end">
@@ -298,3 +349,21 @@ function handleText(e: MouseEvent) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.text-input-overlay {
+  position: absolute;
+  z-index: 50;
+  min-width: 120px;
+  max-width: 400px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px dashed currentColor;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  font-family: sans-serif;
+  line-height: 1.3;
+  padding: 2px 4px;
+}
+</style>
