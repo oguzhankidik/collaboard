@@ -58,6 +58,12 @@ export function useCanvas(canvasRef: Ref<HTMLCanvasElement | null>) {
       case 'pen':
         drawPen(c, element.points)
         break
+      case 'eraser':
+        c.globalCompositeOperation = 'destination-out'
+        c.strokeStyle = 'rgba(0,0,0,1)'
+        c.fillStyle = 'rgba(0,0,0,1)'
+        drawEraser(c, element.points, element.strokeWidth)
+        break
       case 'rect':
         drawRect(c, element.points)
         break
@@ -186,6 +192,25 @@ function drawArrow(c: CanvasRenderingContext2D, points: Point[]) {
   c.moveTo(to.x, to.y)
   c.lineTo(to.x - headLen * Math.cos(angle + Math.PI / 6), to.y - headLen * Math.sin(angle + Math.PI / 6))
   c.stroke()
+}
+
+function drawEraser(c: CanvasRenderingContext2D, points: Point[], size: number) {
+  const r = size / 2
+  if (points.length === 1) {
+    c.beginPath()
+    c.arc(points[0].x, points[0].y, r, 0, Math.PI * 2)
+    c.fill()
+    return
+  }
+  c.lineWidth = size
+  drawPen(c, points)
+  // Fill circles at endpoints to avoid gaps
+  c.beginPath()
+  c.arc(points[0].x, points[0].y, r, 0, Math.PI * 2)
+  c.fill()
+  c.beginPath()
+  c.arc(points[points.length - 1].x, points[points.length - 1].y, r, 0, Math.PI * 2)
+  c.fill()
 }
 
 function drawText(c: CanvasRenderingContext2D, element: DrawElement) {

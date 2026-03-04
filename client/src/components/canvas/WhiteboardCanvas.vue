@@ -131,12 +131,13 @@ function onPointerDown(e: MouseEvent) {
 
   const point = canvasPoint(e)
   const userId = authStore.user?.uid ?? ''
+  const isEraser = canvasStore.activeTool === 'eraser'
   const element: DrawElement = {
     id: crypto.randomUUID(),
     type: canvasStore.activeTool,
     points: [point],
     color: canvasStore.activeColor,
-    strokeWidth: canvasStore.activeStrokeWidth,
+    strokeWidth: isEraser ? canvasStore.activeEraserSize : canvasStore.activeStrokeWidth,
     userId,
     createdAt: Date.now(),
   }
@@ -191,7 +192,7 @@ function onPointerMove(e: MouseEvent) {
 
   const el = currentElement.value
 
-  if (el.type === 'pen') {
+  if (el.type === 'pen' || el.type === 'eraser') {
     el.points.push(point)
   } else {
     el.points = [el.points[0], point]
@@ -272,13 +273,15 @@ function handleText(e: MouseEvent) {
           ? isPanning
             ? 'cursor-grabbing'
             : 'cursor-grab'
-          : canvasStore.activeTool !== 'select'
-            ? 'cursor-crosshair'
-            : isDragging
-              ? 'cursor-grabbing'
-              : isHoveringElement
-                ? 'cursor-grab'
-                : 'cursor-default'
+          : canvasStore.activeTool === 'eraser'
+            ? 'cursor-cell'
+            : canvasStore.activeTool !== 'select'
+              ? 'cursor-crosshair'
+              : isDragging
+                ? 'cursor-grabbing'
+                : isHoveringElement
+                  ? 'cursor-grab'
+                  : 'cursor-default'
       "
       @mousedown="onPointerDown"
       @mousemove="onPointerMove"

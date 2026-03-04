@@ -4,6 +4,7 @@ export const MAX_PARTICIPANTS = 20
 export const DEFAULT_COLOR = '#000000'
 export const DEFAULT_STROKE_WIDTH = 2
 export const STROKE_WIDTHS = [1, 2, 4, 8, 16] as const
+export const ERASER_SIZES = [8, 16, 32, 64] as const
 
 export const ZOOM_MIN = 0.25
 export const ZOOM_MAX = 4.0

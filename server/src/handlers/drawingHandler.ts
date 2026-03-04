@@ -36,4 +36,5 @@ export function registerDrawingHandlers(io: Server, socket: AuthenticatedSocket)
       }
     }
   })
+
 }

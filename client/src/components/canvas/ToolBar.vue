@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useRoomStore } from '@/stores/roomStore'
-import { STROKE_WIDTHS, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } from '@/constants'
+import { STROKE_WIDTHS, ERASER_SIZES, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } from '@/constants'
 import type { ToolType } from '@/types'
 
 const emit = defineEmits<{ 'clear-board': [] }>()
@@ -35,18 +35,6 @@ function exportPng() {
 const canUndo = computed(() => canvasStore.history.length > 0)
 const canRedo = computed(() => canvasStore.redoStack.length > 0)
 
-const selectDropdownStyle = computed(() => ({
-  backgroundColor: 'var(--color-surface-2)',
-  border: '2px solid var(--color-border)',
-  color: 'var(--color-text-muted)',
-  fontFamily: 'var(--font-terminal)',
-  fontSize: '16px',
-  appearance: 'none',
-  backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%278%27 height=%276%27 viewBox=%270 0 8 6%27%3E%3Crect x=%270%27 y=%270%27 width=%272%27 height=%272%27 fill=%27%237070a0%27/%3E%3Crect x=%272%27 y=%272%27 width=%272%27 height=%272%27 fill=%27%237070a0%27/%3E%3Crect x=%274%27 y=%272%27 width=%272%27 height=%272%27 fill=%27%237070a0%27/%3E%3Crect x=%276%27 y=%270%27 width=%272%27 height=%272%27 fill=%27%237070a0%27/%3E%3C/svg%3E")',
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'right 6px center',
-  paddingRight: '20px',
-}))
 </script>
 
 <template>
@@ -72,6 +60,23 @@ const selectDropdownStyle = computed(() => ({
         <rect x="6" y="9" width="2" height="2" fill="currentColor"/>
         <rect x="2" y="11" width="4" height="2" fill="currentColor"/>
         <rect x="4" y="13" width="2" height="2" fill="currentColor"/>
+      </svg>
+    </button>
+
+    <!-- Eraser -->
+    <button
+      title="Eraser"
+      class="btn-icon"
+      :class="{ active: canvasStore.activeTool === 'eraser' }"
+      @click="canvasStore.setActiveTool('eraser')"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16">
+        <rect x="3" y="3" width="10" height="2" fill="currentColor"/>
+        <rect x="3" y="9" width="10" height="2" fill="currentColor"/>
+        <rect x="3" y="3" width="2" height="8" fill="currentColor"/>
+        <rect x="11" y="3" width="2" height="8" fill="currentColor"/>
+        <rect x="5" y="5" width="3" height="4" fill="currentColor"/>
+        <rect x="3" y="12" width="10" height="2" fill="currentColor"/>
       </svg>
     </button>
 
@@ -200,14 +205,20 @@ const selectDropdownStyle = computed(() => ({
       />
     </label>
 
-    <!-- Stroke width -->
+    <!-- Stroke / eraser size selector -->
     <select
-      class="h-9 px-1"
-      :style="selectDropdownStyle"
-      :value="canvasStore.activeStrokeWidth"
-      @change="canvasStore.setActiveStrokeWidth(Number(($event.target as HTMLSelectElement).value))"
+      class="toolbar-select"
+      :value="canvasStore.activeTool === 'eraser' ? canvasStore.activeEraserSize : canvasStore.activeStrokeWidth"
+      @change="canvasStore.activeTool === 'eraser'
+        ? canvasStore.setActiveEraserSize(Number(($event.target as HTMLSelectElement).value))
+        : canvasStore.setActiveStrokeWidth(Number(($event.target as HTMLSelectElement).value))"
     >
-      <option v-for="w in STROKE_WIDTHS" :key="w" :value="w">{{ w }}px</option>
+      <template v-if="canvasStore.activeTool === 'eraser'">
+        <option v-for="s in ERASER_SIZES" :key="s" :value="s">{{ s }}px</option>
+      </template>
+      <template v-else>
+        <option v-for="w in STROKE_WIDTHS" :key="w" :value="w">{{ w }}px</option>
+      </template>
     </select>
 
     <!-- Divider -->
@@ -313,3 +324,21 @@ const selectDropdownStyle = computed(() => ({
     >+</button>
   </div>
 </template>
+
+<style scoped>
+.toolbar-select {
+  padding-inline: 0.25rem;
+  padding-right: 20px;
+  background-color: var(--color-surface-2);
+  border: 2px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-terminal);
+  font-size: 16px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' viewBox='0 0 8 6'%3E%3Crect x='0' y='0' width='2' height='2' fill='%237070a0'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%237070a0'/%3E%3Crect x='4' y='2' width='2' height='2' fill='%237070a0'/%3E%3Crect x='6' y='0' width='2' height='2' fill='%237070a0'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 20%;
+  padding-block: 0;
+}
+</style>

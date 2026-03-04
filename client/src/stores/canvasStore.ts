@@ -3,11 +3,14 @@ import { ref } from 'vue'
 import type { DrawElement, ToolType, Point } from '@/types'
 import { ZOOM_MIN, ZOOM_MAX } from '@/constants'
 
+export const DEFAULT_ERASER_SIZE = 16
+
 export const useCanvasStore = defineStore('canvas', () => {
   const elements = ref<DrawElement[]>([])
   const activeTool = ref<ToolType>('pen')
   const activeColor = ref('#000000')
   const activeStrokeWidth = ref(2)
+  const activeEraserSize = ref(DEFAULT_ERASER_SIZE)
   const history = ref<DrawElement[][]>([])
   const redoStack = ref<DrawElement[][]>([])
 
@@ -39,6 +42,10 @@ export const useCanvasStore = defineStore('canvas', () => {
     history.value.push([...elements.value])
     redoStack.value = []
     elements.value.push(element)
+  }
+
+  function removeElement(id: string) {
+    elements.value = elements.value.filter((e) => e.id !== id)
   }
 
   function updateElement(element: DrawElement) {
@@ -85,6 +92,10 @@ export const useCanvasStore = defineStore('canvas', () => {
     activeStrokeWidth.value = width
   }
 
+  function setActiveEraserSize(size: number) {
+    activeEraserSize.value = size
+  }
+
   function clearHistory() {
     history.value = []
     redoStack.value = []
@@ -95,6 +106,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     activeTool,
     activeColor,
     activeStrokeWidth,
+    activeEraserSize,
     history,
     redoStack,
     zoom,
@@ -102,6 +114,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     panY,
     setElements,
     addElement,
+    removeElement,
     updateElement,
     snapshotHistory,
     moveElement,
@@ -110,6 +123,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     setActiveTool,
     setActiveColor,
     setActiveStrokeWidth,
+    setActiveEraserSize,
     clearHistory,
     setZoom,
     setPan,
