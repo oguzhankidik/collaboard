@@ -52,7 +52,7 @@ export function registerDrawingHandlers(_io: Server, socket: AuthenticatedSocket
     const trusted = { ...element, userId: socket.userId }
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
-      socket.to(roomId).emit('draw:remote', trusted)
+      socket.to(roomId).emit('draw:committed', trusted)
 
       // Persist only on draw:end
       try {

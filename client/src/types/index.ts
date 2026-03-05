@@ -75,6 +75,7 @@ export interface SocketEvents {
 
   // Server → Client
   'draw:remote': (element: DrawElement) => void
+  'draw:committed': (element: DrawElement) => void
   'cursor:remote': (cursor: RemoteCursor) => void
   'room:state': (elements: DrawElement[]) => void
   'room:lobby': (state: LobbyState) => void
