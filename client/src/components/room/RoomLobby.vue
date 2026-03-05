@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { Socket } from 'socket.io-client'
 import { useRoomStore } from '@/stores/roomStore'
 import { useAuthStore } from '@/stores/authStore'
+import { TIMER_OPTIONS_MIN } from '@/constants'
 import AppButton from '@/components/ui/AppButton.vue'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 
@@ -17,6 +18,17 @@ const authStore = useAuthStore()
 const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
 
 const copied = ref(false)
+const selectedDurationMs = ref(roomStore.roomSettings.timerDurationMs)
+
+watch(() => roomStore.roomSettings.timerDurationMs, (val) => {
+  selectedDurationMs.value = val
+})
+
+function formatDuration(ms: number): string {
+  if (ms === 0) return 'None'
+  const minutes = ms / 60_000
+  return `${minutes}m`
+}
 
 function copyLink() {
   const url = `${window.location.origin}/board/${props.roomId}`
@@ -27,7 +39,10 @@ function copyLink() {
 }
 
 function startRoom() {
-  props.socket?.emit('room:start', props.roomId)
+  props.socket?.emit('room:start', {
+    roomId: props.roomId,
+    settings: { timerDurationMs: selectedDurationMs.value },
+  })
 }
 </script>
 
@@ -73,6 +88,38 @@ function startRoom() {
             class="text-xs py-2 text-theme-muted font-terminal"
           >
             No participants yet…
+          </div>
+        </div>
+
+        <hr class="border-theme" />
+
+        <!-- Settings section -->
+        <div class="flex flex-col gap-2">
+          <span class="font-pixel text-[8px] text-theme-muted tracking-widest">SETTINGS</span>
+
+          <!-- Session Timer -->
+          <div class="flex flex-col gap-1">
+            <span class="text-xs font-terminal text-theme-muted">Session Timer</span>
+
+            <!-- Host: segmented selector -->
+            <div v-if="isOwner" class="flex flex-wrap gap-1">
+              <button
+                v-for="minutes in TIMER_OPTIONS_MIN"
+                :key="minutes"
+                class="px-2 py-1 text-xs font-terminal border transition-colors"
+                :class="selectedDurationMs === minutes * 60_000
+                  ? 'border-theme-accent text-theme-accent bg-theme-surface-2'
+                  : 'border-theme text-theme-muted hover:border-theme-accent hover:text-theme'"
+                @click="selectedDurationMs = minutes * 60_000"
+              >
+                {{ formatDuration(minutes * 60_000) }}
+              </button>
+            </div>
+
+            <!-- Non-host: read-only label -->
+            <span v-else class="text-xs font-terminal text-theme">
+              {{ formatDuration(roomStore.roomSettings.timerDurationMs) }}
+            </span>
           </div>
         </div>
 

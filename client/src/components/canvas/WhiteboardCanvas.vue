@@ -208,6 +208,23 @@ function onPointerDown(e: MouseEvent) {
     return
   }
 
+  if (canvasStore.activeTool === 'fill') {
+    const point = canvasPoint(e)
+    const el: DrawElement = {
+      id: crypto.randomUUID(),
+      type: 'fill',
+      points: [point],
+      color: canvasStore.activeColor,
+      strokeWidth: 0,
+      userId: authStore.user?.uid ?? '',
+      createdAt: Date.now(),
+    }
+    canvasStore.addElement(el)
+    scheduleStaticRender()
+    props.socket?.emit('draw:end', el)
+    return
+  }
+
   const point = canvasPoint(e)
   const userId = authStore.user?.uid ?? ''
   const isEraser = canvasStore.activeTool === 'eraser'

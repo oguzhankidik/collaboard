@@ -7,7 +7,7 @@ import { RateLimiter } from '../lib/rateLimiter'
 // Max 120 draw events per second per user
 const drawLimiter = new RateLimiter(120, 1000)
 
-const VALID_TYPES = new Set(['pen', 'rect', 'circle', 'arrow', 'text', 'select', 'eraser'])
+const VALID_TYPES = new Set(['pen', 'rect', 'circle', 'arrow', 'text', 'select', 'eraser', 'fill'])
 const MAX_POINTS = 10_000
 const MAX_TEXT_LENGTH = 1_000
 const MAX_COLOR_LENGTH = 20

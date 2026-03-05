@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Room, Participant, RoomStatus, ChatMessage } from '@/types'
+import type { Room, Participant, RoomStatus, ChatMessage, RoomSettings } from '@/types'
 
 export const useRoomStore = defineStore('room', () => {
   const rooms = ref<Room[]>([])
@@ -13,6 +13,8 @@ export const useRoomStore = defineStore('room', () => {
   const roomOwnerId = ref<string>('')
   const roomStatus = ref<RoomStatus>('waiting')
   const chatMessages = ref<ChatMessage[]>([])
+  const roomSettings = ref<RoomSettings>({ timerDurationMs: 0 })
+  const sessionStartedAt = ref<number | null>(null)
 
   function setRooms(list: Room[]) {
     rooms.value = list
@@ -30,10 +32,20 @@ export const useRoomStore = defineStore('room', () => {
     rooms.value.unshift(room)
   }
 
-  function setLobbyState(ownerId: string, status: RoomStatus, participants: Participant[]) {
+  function setLobbyState(ownerId: string, status: RoomStatus, participants: Participant[], settings?: RoomSettings, startedAt?: number) {
     roomOwnerId.value = ownerId
     roomStatus.value = status
     lobbyParticipants.value = participants
+    if (settings !== undefined) roomSettings.value = settings
+    sessionStartedAt.value = startedAt ?? null
+  }
+
+  function setRoomSettings(s: RoomSettings) {
+    roomSettings.value = s
+  }
+
+  function setSessionStartedAt(ts: number | null) {
+    sessionStartedAt.value = ts
   }
 
   function addLobbyParticipant(p: Participant) {
@@ -76,6 +88,8 @@ export const useRoomStore = defineStore('room', () => {
     roomOwnerId,
     roomStatus,
     chatMessages,
+    roomSettings,
+    sessionStartedAt,
     setRooms,
     setCurrentRoom,
     setCurrentRoomId,
@@ -88,5 +102,7 @@ export const useRoomStore = defineStore('room', () => {
     addChatMessage,
     setChatHistory,
     clearChat,
+    setRoomSettings,
+    setSessionStartedAt,
   }
 })

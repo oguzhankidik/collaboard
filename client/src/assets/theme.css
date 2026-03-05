@@ -46,6 +46,22 @@ body::after {
   animation: scanline-drift 8s linear infinite;
 }
 
+body.in-board::after {
+  display: none;
+}
+
+body.in-board .header-accent-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background-image: repeating-linear-gradient(0deg,
+      transparent, transparent 2px,
+      rgba(0, 0, 0, 0.10) 2px, rgba(0, 0, 0, 0.10) 4px);
+  animation: scanline-drift 8s linear infinite;
+}
+
 /* ============================================================
    Keyframes
    ============================================================ */
@@ -293,6 +309,18 @@ body::after {
     box-shadow: var(--shadow-pixel-accent), var(--glow-accent);
   }
 
+  .toolbar-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    background-image: repeating-linear-gradient(0deg,
+        transparent, transparent 2px,
+        rgba(0, 0, 0, 0.10) 2px, rgba(0, 0, 0, 0.10) 4px);
+    animation: scanline-drift 8s linear infinite;
+  }
+
   /* ── Gradient accent border (header) ── */
   .header-accent-border {
     position: relative;
@@ -420,9 +448,22 @@ body::after {
 
   /* ── Window panel (accent-bordered card used in lobby + participant panel) ── */
   .window-panel {
+    position: relative;
     background-color: var(--color-surface);
     border: 2px solid var(--color-accent);
     box-shadow: 4px 4px 0 var(--color-accent);
+  }
+
+  .window-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    background-image: repeating-linear-gradient(0deg,
+        transparent, transparent 2px,
+        rgba(0, 0, 0, 0.10) 2px, rgba(0, 0, 0, 0.10) 4px);
+    animation: scanline-drift 8s linear infinite;
   }
 
   .window-titlebar {

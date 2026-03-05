@@ -1,6 +1,10 @@
-export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'text' | 'select'
+export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'text' | 'select' | 'fill'
 
 export type RoomStatus = 'waiting' | 'started'
+
+export interface RoomSettings {
+  timerDurationMs: number  // 0 = no timer
+}
 
 export interface Point {
   x: number

@@ -10,3 +10,8 @@ export const ZOOM_MIN = 0.25
 export const ZOOM_MAX = 4.0
 export const ZOOM_STEP = 0.25
 export const ZOOM_WHEEL_FACTOR = 1.1
+
+export const TIMER_OPTIONS_MIN = [0, 5, 10, 15, 30, 60]  // 0 = None
+export const TIMER_WARN_YELLOW_MS = 60_000
+export const TIMER_WARN_RED_MS = 15_000
+export const VALID_TIMER_DURATIONS_MS = new Set([0, 300_000, 600_000, 900_000, 1_800_000, 3_600_000])

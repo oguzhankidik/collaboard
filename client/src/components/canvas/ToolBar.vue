@@ -47,19 +47,7 @@ const canRedo = computed(() => canvasStore.redoStack.length > 0)
       :class="{ active: canvasStore.activeTool === 'pen' }"
       @click="canvasStore.setActiveTool('pen')"
     >
-      <svg width="16" height="16" viewBox="0 0 16 16">
-        <rect x="10" y="1" width="2" height="2" fill="currentColor"/>
-        <rect x="12" y="3" width="2" height="2" fill="currentColor"/>
-        <rect x="8" y="3" width="2" height="2" fill="currentColor"/>
-        <rect x="6" y="5" width="2" height="2" fill="currentColor"/>
-        <rect x="10" y="5" width="2" height="2" fill="currentColor"/>
-        <rect x="4" y="7" width="2" height="2" fill="currentColor"/>
-        <rect x="8" y="7" width="2" height="2" fill="currentColor"/>
-        <rect x="2" y="9" width="2" height="2" fill="currentColor"/>
-        <rect x="6" y="9" width="2" height="2" fill="currentColor"/>
-        <rect x="2" y="11" width="4" height="2" fill="currentColor"/>
-        <rect x="4" y="13" width="2" height="2" fill="currentColor"/>
-      </svg>
+      <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="23 5 23 7 22 7 22 8 21 8 21 9 20 9 20 10 19 10 19 9 18 9 18 8 17 8 17 7 16 7 16 6 15 6 15 5 14 5 14 4 15 4 15 3 16 3 16 2 17 2 17 1 19 1 19 2 20 2 20 3 21 3 21 4 22 4 22 5 23 5"/><path d="m17,10v-1h-1v-1h-1v-1h-1v-1h-2v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v6h6v-1h1v-1h1v-1h1v-1h1v-1h1v-1h1v-1h1v-1h1v-1h1v-1h1v-1h1v-2h-1Zm-2,2v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1h-1v1H3v-4h1v-1h1v-1h1v-1h1v-1h1v-1h1v-1h1v-1h1v-1h1v-1h2v1h1v1h1v2h-1Z"/></svg>
     </button>
 
     <!-- Eraser -->
@@ -76,6 +64,25 @@ const canRedo = computed(() => canvasStore.redoStack.length > 0)
         <rect x="11" y="3" width="2" height="8" fill="currentColor"/>
         <rect x="5" y="5" width="3" height="4" fill="currentColor"/>
         <rect x="3" y="12" width="10" height="2" fill="currentColor"/>
+      </svg>
+    </button>
+
+    <!-- Fill -->
+    <button
+      title="Fill"
+      class="btn-icon"
+      :class="{ active: canvasStore.activeTool === 'fill' }"
+      @click="canvasStore.setActiveTool('fill')"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16">
+        <rect x="4" y="2" width="6" height="2" fill="currentColor"/>
+        <rect x="2" y="4" width="2" height="6" fill="currentColor"/>
+        <rect x="10" y="4" width="2" height="4" fill="currentColor"/>
+        <rect x="4" y="10" width="6" height="2" fill="currentColor"/>
+        <rect x="10" y="2" width="2" height="2" fill="currentColor"/>
+        <rect x="12" y="4" width="2" height="2" fill="currentColor"/>
+        <rect x="12" y="8" width="2" height="4" fill="currentColor"/>
+        <rect x="10" y="12" width="4" height="2" fill="currentColor"/>
       </svg>
     </button>
 
@@ -204,8 +211,9 @@ const canRedo = computed(() => canvasStore.redoStack.length > 0)
       />
     </label>
 
-    <!-- Stroke / eraser size selector -->
+    <!-- Stroke / eraser size selector (hidden for fill tool) -->
     <select
+      v-if="canvasStore.activeTool !== 'fill'"
       class="toolbar-select"
       :value="canvasStore.activeTool === 'eraser' ? canvasStore.activeEraserSize : canvasStore.activeStrokeWidth"
       @change="canvasStore.activeTool === 'eraser'
