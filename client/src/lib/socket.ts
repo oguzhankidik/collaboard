@@ -10,8 +10,8 @@ export async function getSocket(): Promise<Socket> {
   const authPayload = firebaseToken
     ? { token: firebaseToken }
     : {
-        guestId: localStorage.getItem('guest_id') ?? '',
-        guestName: localStorage.getItem('guest_name') ?? '',
+        guestId: sessionStorage.getItem('guest_id') ?? '',
+        guestName: sessionStorage.getItem('guest_name') ?? '',
       }
 
   socket = io(import.meta.env.VITE_SOCKET_URL as string, {
