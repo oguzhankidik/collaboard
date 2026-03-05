@@ -15,11 +15,19 @@ const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
 
 
 function exportPng() {
-  const canvas = document.querySelector('canvas')
-  if (!canvas) return
+  const layers = document.querySelectorAll<HTMLCanvasElement>('.whiteboard-canvas-layer')
+  if (!layers.length) return
+  const first = layers[0]
+  const temp = document.createElement('canvas')
+  temp.width = first.width
+  temp.height = first.height
+  const ctx = temp.getContext('2d')!
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, temp.width, temp.height)
+  layers.forEach((c) => ctx.drawImage(c, 0, 0))
   const link = document.createElement('a')
   link.download = 'collaboard.png'
-  link.href = canvas.toDataURL('image/png')
+  link.href = temp.toDataURL('image/png')
   link.click()
 }
 

@@ -3,18 +3,38 @@ import type { Ref } from 'vue'
 import type { DrawElement, Point } from '@/types'
 import { useCanvasStore } from '@/stores/canvasStore'
 
-export function getElementBounds(element: DrawElement): { x: number; y: number; w: number; h: number } {
+// --- Bounds cache (module-level, persists across re-renders) ---
+const boundsCache = new Map<string, { x: number; y: number; w: number; h: number }>()
+
+function computeBounds(element: DrawElement): { x: number; y: number; w: number; h: number } {
   if (element.type === 'text' && element.points.length > 0) {
     const fontSize = element.strokeWidth * 8 + 12
     const approxWidth = Math.max((element.text?.length ?? 5) * fontSize * 0.6, 20)
     const { x, y } = element.points[0]
     return { x, y: y - fontSize, w: approxWidth, h: fontSize * 1.2 }
   }
+  if (element.points.length === 0) return { x: 0, y: 0, w: 0, h: 0 }
   const xs = element.points.map((p) => p.x)
   const ys = element.points.map((p) => p.y)
   const x = Math.min(...xs)
   const y = Math.min(...ys)
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+}
+
+export function getElementBounds(element: DrawElement): { x: number; y: number; w: number; h: number } {
+  return boundsCache.get(element.id) ?? computeBounds(element)
+}
+
+export function cacheElementBounds(element: DrawElement): void {
+  boundsCache.set(element.id, computeBounds(element))
+}
+
+export function invalidateBounds(id: string): void {
+  boundsCache.delete(id)
+}
+
+export function clearBoundsCache(): void {
+  boundsCache.clear()
 }
 
 export function hitTestElement(element: DrawElement, point: Point): boolean {
@@ -23,101 +43,124 @@ export function hitTestElement(element: DrawElement, point: Point): boolean {
   return point.x >= x - PAD && point.x <= x + w + PAD && point.y >= y - PAD && point.y <= y + h + PAD
 }
 
-export function useCanvas(canvasRef: Ref<HTMLCanvasElement | null>) {
-  const ctx = ref<CanvasRenderingContext2D | null>(null)
+export function useCanvas(
+  staticCanvasRef: Ref<HTMLCanvasElement | null>,
+  activeCanvasRef: Ref<HTMLCanvasElement | null>,
+) {
+  const staticCtx = ref<CanvasRenderingContext2D | null>(null)
+  const activeCtx = ref<CanvasRenderingContext2D | null>(null)
+
+  function getStaticCtx(): CanvasRenderingContext2D {
+    if (!staticCtx.value) throw new Error('Static canvas not initialized')
+    return staticCtx.value
+  }
+
+  function getActiveCtx(): CanvasRenderingContext2D {
+    if (!activeCtx.value) throw new Error('Active canvas not initialized')
+    return activeCtx.value
+  }
 
   function resize() {
-    const canvas = canvasRef.value
-    if (!canvas) return
-    const { width, height } = canvas.getBoundingClientRect()
-    canvas.width = width
-    canvas.height = height
-    redrawAll([])
+    const sc = staticCanvasRef.value
+    const ac = activeCanvasRef.value
+    if (!sc || !ac) return
+    const { width, height } = sc.getBoundingClientRect()
+    sc.width = width
+    sc.height = height
+    ac.width = width
+    ac.height = height
   }
 
-  function getContext(): CanvasRenderingContext2D {
-    if (!ctx.value) throw new Error('Canvas context not initialized')
-    return ctx.value
-  }
-
-  function clear() {
-    const canvas = canvasRef.value
-    if (!canvas) return
-    getContext().clearRect(0, 0, canvas.width, canvas.height)
-  }
-
-  function drawElement(element: DrawElement) {
-    const c = getContext()
-    c.save()
-    c.strokeStyle = element.color
-    c.lineWidth = element.strokeWidth
-    c.lineCap = 'round'
-    c.lineJoin = 'round'
-
-    switch (element.type) {
-      case 'pen':
-        drawPen(c, element.points)
-        break
-      case 'eraser':
-        c.globalCompositeOperation = 'destination-out'
-        c.strokeStyle = 'rgba(0,0,0,1)'
-        c.fillStyle = 'rgba(0,0,0,1)'
-        drawEraser(c, element.points, element.strokeWidth)
-        break
-      case 'rect':
-        drawRect(c, element.points)
-        break
-      case 'circle':
-        drawCircle(c, element.points)
-        break
-      case 'arrow':
-        drawArrow(c, element.points)
-        break
-      case 'text':
-        drawText(c, element)
-        break
-      default:
-        break
-    }
-    c.restore()
-  }
-
-  function redrawAll(
-    elements: DrawElement[],
-    currentEl?: DrawElement | null,
-    selectedId?: string | null,
-  ) {
+  function isInViewport(el: DrawElement, canvas: HTMLCanvasElement): boolean {
+    if (el.points.length === 0) return false
     const store = useCanvasStore()
-    const c = getContext()
-    clear()
-    c.save()
+    const bounds = getElementBounds(el)
+    const PAD = el.strokeWidth
+    const vx = store.panX
+    const vy = store.panY
+    const vw = canvas.width / store.zoom
+    const vh = canvas.height / store.zoom
+    return (
+      bounds.x + bounds.w + PAD >= vx &&
+      bounds.x - PAD <= vx + vw &&
+      bounds.y + bounds.h + PAD >= vy &&
+      bounds.y - PAD <= vy + vh
+    )
+  }
+
+  function applyViewTransform(c: CanvasRenderingContext2D) {
+    const store = useCanvasStore()
     c.scale(store.zoom, store.zoom)
     c.translate(-store.panX, -store.panY)
+  }
+
+  // Draw committed elements onto the static canvas (with viewport culling)
+  function redrawStatic(elements: DrawElement[], selectedId?: string | null) {
+    const canvas = staticCanvasRef.value
+    if (!canvas) return
+    const c = getStaticCtx()
+    c.clearRect(0, 0, canvas.width, canvas.height)
+    c.save()
+    applyViewTransform(c)
     for (const el of elements) {
-      drawElement(el)
+      if (isInViewport(el, canvas)) {
+        drawElement(c, el)
+      }
     }
-    if (currentEl) drawElement(currentEl)
     if (selectedId) {
       const sel = elements.find((e) => e.id === selectedId)
-      if (sel) drawSelectionBox(sel)
+      if (sel) drawSelectionBox(c, sel)
     }
     c.restore()
   }
 
-  function drawSelectionBox(element: DrawElement) {
-    const c = getContext()
-    const { x, y, w, h } = getElementBounds(element)
-    const PAD = 6
+  // Draw in-progress elements onto the active canvas (no culling — always visible)
+  function redrawActive(
+    currentEl: DrawElement | null,
+    remoteInProgress?: Map<string, DrawElement>,
+  ) {
+    const canvas = activeCanvasRef.value
+    if (!canvas) return
+    const c = getActiveCtx()
+    c.clearRect(0, 0, canvas.width, canvas.height)
     c.save()
-    c.strokeStyle = '#3b82f6'
-    c.lineWidth = 1.5
-    c.setLineDash([5, 3])
-    c.strokeRect(x - PAD, y - PAD, w + PAD * 2, h + PAD * 2)
+    applyViewTransform(c)
+    if (remoteInProgress) {
+      for (const el of remoteInProgress.values()) {
+        drawElement(c, el)
+      }
+    }
+    if (currentEl) drawElement(c, currentEl)
+    c.restore()
+  }
+
+  // Full render on the active canvas — used for eraser mode (static canvas is hidden)
+  function redrawActiveAll(
+    elements: DrawElement[],
+    currentEl: DrawElement | null,
+    selectedId?: string | null,
+  ) {
+    const canvas = activeCanvasRef.value
+    if (!canvas) return
+    const c = getActiveCtx()
+    c.clearRect(0, 0, canvas.width, canvas.height)
+    c.save()
+    applyViewTransform(c)
+    for (const el of elements) {
+      if (isInViewport(el, canvas)) {
+        drawElement(c, el)
+      }
+    }
+    if (currentEl) drawElement(c, currentEl)
+    if (selectedId) {
+      const sel = elements.find((e) => e.id === selectedId)
+      if (sel) drawSelectionBox(c, sel)
+    }
     c.restore()
   }
 
   function canvasPoint(e: MouseEvent | TouchEvent): Point {
-    const canvas = canvasRef.value!
+    const canvas = activeCanvasRef.value!
     const rect = canvas.getBoundingClientRect()
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
@@ -129,9 +172,11 @@ export function useCanvas(canvasRef: Ref<HTMLCanvasElement | null>) {
   }
 
   onMounted(() => {
-    const canvas = canvasRef.value
-    if (!canvas) return
-    ctx.value = canvas.getContext('2d')
+    const sc = staticCanvasRef.value
+    const ac = activeCanvasRef.value
+    if (!sc || !ac) return
+    staticCtx.value = sc.getContext('2d')
+    activeCtx.value = ac.getContext('2d')
     resize()
     window.addEventListener('resize', resize)
   })
@@ -140,10 +185,56 @@ export function useCanvas(canvasRef: Ref<HTMLCanvasElement | null>) {
     window.removeEventListener('resize', resize)
   })
 
-  return { ctx, drawElement, redrawAll, clear, canvasPoint, resize, drawSelectionBox }
+  return { canvasPoint, resize, redrawStatic, redrawActive, redrawActiveAll }
 }
 
 // --- Drawing helpers ---
+
+function drawElement(c: CanvasRenderingContext2D, element: DrawElement) {
+  c.save()
+  c.strokeStyle = element.color
+  c.lineWidth = element.strokeWidth
+  c.lineCap = 'round'
+  c.lineJoin = 'round'
+
+  switch (element.type) {
+    case 'pen':
+      drawPen(c, element.points)
+      break
+    case 'eraser':
+      c.globalCompositeOperation = 'destination-out'
+      c.strokeStyle = 'rgba(0,0,0,1)'
+      c.fillStyle = 'rgba(0,0,0,1)'
+      drawEraser(c, element.points, element.strokeWidth)
+      break
+    case 'rect':
+      drawRect(c, element.points)
+      break
+    case 'circle':
+      drawCircle(c, element.points)
+      break
+    case 'arrow':
+      drawArrow(c, element.points)
+      break
+    case 'text':
+      drawText(c, element)
+      break
+    default:
+      break
+  }
+  c.restore()
+}
+
+function drawSelectionBox(c: CanvasRenderingContext2D, element: DrawElement) {
+  const { x, y, w, h } = getElementBounds(element)
+  const PAD = 6
+  c.save()
+  c.strokeStyle = '#3b82f6'
+  c.lineWidth = 1.5
+  c.setLineDash([5, 3])
+  c.strokeRect(x - PAD, y - PAD, w + PAD * 2, h + PAD * 2)
+  c.restore()
+}
 
 function drawPen(c: CanvasRenderingContext2D, points: Point[]) {
   if (points.length < 2) return

@@ -5,7 +5,13 @@ import type { Socket } from 'socket.io-client'
 import type { DrawElement, Point } from '@/types'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
-import { useCanvas, hitTestElement } from '@/composables/useCanvas'
+import {
+  useCanvas,
+  hitTestElement,
+  cacheElementBounds,
+  invalidateBounds,
+  clearBoundsCache,
+} from '@/composables/useCanvas'
 import { CURSOR_THROTTLE_MS, ZOOM_MIN, ZOOM_MAX, ZOOM_WHEEL_FACTOR } from '@/constants'
 import CursorOverlay from './CursorOverlay.vue'
 import ToolBar from './ToolBar.vue'
@@ -17,10 +23,19 @@ const props = defineProps<{ socket: Socket | null }>()
 const route = useRoute()
 const roomId = route.params.roomId as string
 
-const canvasRef = ref<HTMLCanvasElement | null>(null)
+// Two canvas layers: static (committed elements) + active (in-progress drawing)
+const staticCanvasRef = ref<HTMLCanvasElement | null>(null)
+const activeCanvasRef = ref<HTMLCanvasElement | null>(null)
+
 const canvasStore = useCanvasStore()
 const authStore = useAuthStore()
-const { redrawAll, canvasPoint } = useCanvas(canvasRef)
+const { redrawStatic, redrawActive, redrawActiveAll, canvasPoint } = useCanvas(
+  staticCanvasRef,
+  activeCanvasRef,
+)
+
+// In-progress remote strokes (not yet committed) — plain Map, no reactivity needed
+const remoteInProgress = new Map<string, DrawElement>()
 
 // Drawing state
 const isDrawing = ref(false)
@@ -46,31 +61,84 @@ const isPanning = ref(false)
 const panStartScreen = ref<Point>({ x: 0, y: 0 })
 const panStartOffset = ref<Point>({ x: 0, y: 0 })
 
-// rAF render loop
-let animFrameId: number | null = null
+// Whether eraser is actively being drawn (active canvas shows full render, static hidden)
+const isEraserDrawing = ref(false)
 
-function scheduleRender() {
-  if (animFrameId !== null) return
-  animFrameId = requestAnimationFrame(() => {
-    animFrameId = null
-    redrawAll(canvasStore.elements, currentElement.value, selectedElementId.value)
+// --- RAF handles ---
+let staticFrameId: number | null = null
+let activeFrameId: number | null = null
+
+function scheduleStaticRender() {
+  if (staticFrameId !== null) return
+  staticFrameId = requestAnimationFrame(() => {
+    staticFrameId = null
+    redrawStatic(canvasStore.elements, selectedElementId.value)
+  })
+}
+
+function scheduleActiveRender() {
+  if (activeFrameId !== null) return
+  activeFrameId = requestAnimationFrame(() => {
+    activeFrameId = null
+    redrawActive(currentElement.value, remoteInProgress)
+  })
+}
+
+// Eraser mode: hide static canvas, do full render on active canvas
+function scheduleEraserRender() {
+  if (activeFrameId !== null) return
+  activeFrameId = requestAnimationFrame(() => {
+    activeFrameId = null
+    redrawActiveAll(canvasStore.elements, currentElement.value, selectedElementId.value)
   })
 }
 
 // --- Socket setup ---
 onMounted(() => {
+  // Resize both canvases after mount then do initial static render
+  window.addEventListener('resize', () => {
+    scheduleStaticRender()
+    scheduleActiveRender()
+  })
+
   props.socket?.on('draw:remote', (element: DrawElement) => {
+    // In-progress remote stroke — show on active canvas only
+    remoteInProgress.set(element.userId, element)
+    scheduleActiveRender()
+  })
+
+  props.socket?.on('draw:committed', (element: DrawElement) => {
+    // Remote stroke finished — move to committed store and redraw static
+    remoteInProgress.delete(element.userId)
     canvasStore.updateElement(element)
-    redrawAll(canvasStore.elements, null, selectedElementId.value)
+    cacheElementBounds(element)
+    scheduleStaticRender()
+    scheduleActiveRender()
+  })
+
+  props.socket?.on('user:left', (userId: string) => {
+    if (remoteInProgress.has(userId)) {
+      remoteInProgress.delete(userId)
+      scheduleActiveRender()
+    }
+  })
+
+  props.socket?.on('board:cleared', () => {
+    canvasStore.setElements([])
+    clearBoundsCache()
+    remoteInProgress.clear()
+    scheduleStaticRender()
+    scheduleActiveRender()
   })
 })
 
+// Undo/redo and room:state (setElements) change the array reference → redraw static
 watch(
   () => canvasStore.elements,
-  () => {
-    redrawAll(canvasStore.elements, null, selectedElementId.value)
+  (newElements) => {
+    newElements.forEach(cacheElementBounds)
+    scheduleStaticRender()
   },
-  { deep: true },
 )
 
 watch(
@@ -78,20 +146,25 @@ watch(
   () => {
     selectedElementId.value = null
     isHoveringElement.value = false
-    redrawAll(canvasStore.elements)
+    scheduleStaticRender()
   },
 )
 
 watch(
   () => [canvasStore.zoom, canvasStore.panX, canvasStore.panY],
   () => {
-    scheduleRender()
+    if (isEraserDrawing.value) {
+      scheduleEraserRender()
+    } else {
+      scheduleStaticRender()
+      scheduleActiveRender()
+    }
   },
 )
 
 // --- Wheel zoom ---
 function onWheel(e: WheelEvent) {
-  const rect = canvasRef.value!.getBoundingClientRect()
+  const rect = activeCanvasRef.value!.getBoundingClientRect()
   const mx = e.clientX - rect.left
   const my = e.clientY - rect.top
 
@@ -103,7 +176,7 @@ function onWheel(e: WheelEvent) {
   const worldY = my / oldZoom + canvasStore.panY
   canvasStore.setZoom(newZoom)
   canvasStore.setPan(worldX - mx / newZoom, worldY - my / newZoom)
-  scheduleRender()
+  scheduleStaticRender()
 }
 
 // --- Drawing events ---
@@ -124,8 +197,9 @@ function onPointerDown(e: MouseEvent) {
       dragStart = point
       dragOriginPoints = hit.points.map((p) => ({ ...p }))
       hasMovedDuringDrag = false
+      invalidateBounds(hit.id)
     }
-    redrawAll(canvasStore.elements, null, hit?.id ?? null)
+    scheduleStaticRender()
     return
   }
 
@@ -149,6 +223,11 @@ function onPointerDown(e: MouseEvent) {
 
   isDrawing.value = true
   currentElement.value = element
+
+  if (isEraser) {
+    isEraserDrawing.value = true
+  }
+
   props.socket?.emit('draw:start', element)
 }
 
@@ -169,7 +248,7 @@ function onPointerMove(e: MouseEvent) {
       panStartOffset.value.x - dx / canvasStore.zoom,
       panStartOffset.value.y - dy / canvasStore.zoom,
     )
-    scheduleRender()
+    scheduleStaticRender()
     return
   }
 
@@ -187,7 +266,7 @@ function onPointerMove(e: MouseEvent) {
       const el = canvasStore.elements.find((e) => e.id === selectedElementId.value)
       if (el) {
         canvasStore.updateElement({ ...el, points: newPoints })
-        scheduleRender()
+        scheduleStaticRender()
       }
     }
     return
@@ -203,7 +282,13 @@ function onPointerMove(e: MouseEvent) {
     el.points = [el.points[0], point]
   }
 
-  scheduleRender()
+  // Eraser: full render on active canvas (static is hidden via CSS)
+  // Normal tools: only update active canvas (O(1) regardless of element count)
+  if (isEraserDrawing.value) {
+    scheduleEraserRender()
+  } else {
+    scheduleActiveRender()
+  }
 
   // Draw update — throttled to 16ms
   if (now - lastDrawEmit >= 16) {
@@ -213,9 +298,13 @@ function onPointerMove(e: MouseEvent) {
 }
 
 function onPointerUp() {
-  if (animFrameId !== null) {
-    cancelAnimationFrame(animFrameId)
-    animFrameId = null
+  if (staticFrameId !== null) {
+    cancelAnimationFrame(staticFrameId)
+    staticFrameId = null
+  }
+  if (activeFrameId !== null) {
+    cancelAnimationFrame(activeFrameId)
+    activeFrameId = null
   }
 
   if (isPanning.value) {
@@ -226,12 +315,16 @@ function onPointerUp() {
   if (canvasStore.activeTool === 'select') {
     if (isDragging.value && selectedElementId.value && hasMovedDuringDrag) {
       const el = canvasStore.elements.find((e) => e.id === selectedElementId.value)
-      if (el) props.socket?.emit('draw:end', el)
+      if (el) {
+        cacheElementBounds(el)
+        props.socket?.emit('draw:end', el)
+      }
     }
     isDragging.value = false
     dragStart = null
     dragOriginPoints = []
     hasMovedDuringDrag = false
+    scheduleStaticRender()
     return
   }
 
@@ -240,12 +333,21 @@ function onPointerUp() {
   const el = { ...currentElement.value, points: [...currentElement.value.points] }
   isDrawing.value = false
   currentElement.value = null
+
+  // Restore eraser mode — show static canvas again
+  if (isEraserDrawing.value) {
+    isEraserDrawing.value = false
+  }
+
   canvasStore.addElement(el)
+  cacheElementBounds(el)
   props.socket?.emit('draw:end', el)
+  scheduleStaticRender()
+  scheduleActiveRender()
 }
 
 function handleText(e: MouseEvent) {
-  const rect = canvasRef.value!.getBoundingClientRect()
+  const rect = activeCanvasRef.value!.getBoundingClientRect()
   const screenX = e.clientX - rect.left
   const screenY = e.clientY - rect.top
   const worldPoint = canvasPoint(e)
@@ -277,7 +379,8 @@ function commitTextFromInput() {
   }
 
   canvasStore.addElement(element)
-  redrawAll(canvasStore.elements)
+  cacheElementBounds(element)
+  scheduleStaticRender()
   props.socket?.emit('draw:end', element)
 }
 
@@ -298,9 +401,17 @@ function onTextKeydown(e: KeyboardEvent) {
   <div class="relative w-full h-full overflow-hidden bg-theme-bg">
     <ToolBar @clear-board="props.socket?.emit('board:clear', roomId)" />
 
+    <!-- Static canvas: committed elements. Hidden during eraser drawing. -->
     <canvas
-      ref="canvasRef"
-      class="absolute inset-0 w-full h-full"
+      ref="staticCanvasRef"
+      class="whiteboard-canvas-layer absolute inset-0 w-full h-full pointer-events-none"
+      :class="{ invisible: isEraserDrawing }"
+    />
+
+    <!-- Active canvas: in-progress drawing + remote strokes. Receives pointer events. -->
+    <canvas
+      ref="activeCanvasRef"
+      class="whiteboard-canvas-layer absolute inset-0 w-full h-full"
       :class="
         canvasStore.activeTool === 'hand'
           ? isPanning
