@@ -11,6 +11,12 @@ export const ZOOM_MAX = 4.0
 export const ZOOM_STEP = 0.25
 export const ZOOM_WHEEL_FACTOR = 1.1
 
+export const BOARD_SIZE = 8000  // world units; board spans ±BOARD_SIZE/2 in both axes
+
+export const MINIMAP_W = 120
+export const MINIMAP_H = 120
+export const MINIMAP_PADDING = 50   // world-space padding around content bounds
+
 export const TIMER_OPTIONS_MIN = [0, 5, 10, 15, 30, 60]  // 0 = None
 export const TIMER_WARN_YELLOW_MS = 60_000
 export const TIMER_WARN_RED_MS = 15_000

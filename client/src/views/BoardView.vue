@@ -149,13 +149,12 @@ function confirmClose() {
   <div class="flex flex-col h-screen overflow-hidden bg-theme-bg">
     <!-- Header — visible in every phase -->
     <header class="flex items-center justify-between px-4 py-2 z-20 shrink-0 header-accent-border bg-theme-surface">
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 md:gap-3">
         <AppButton variant="secondary" @click="leaveRoom">← Leave Room</AppButton>
-        <span class="text-xs font-mono text-theme-muted">{{ roomId }}</span>
       </div>
       <!-- Session timer — centered in header -->
       <SessionTimer v-if="phase === 'canvas'" />
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 md:gap-3">
         <span v-if="!connected" class="text-xs px-2 py-1 badge-disconnected">Disconnected</span>
         <AppButton
           v-if="phase === 'lobby' && isOwner"
@@ -167,7 +166,7 @@ function confirmClose() {
           variant="danger"
           @click="showStopModal = true"
         >■ Stop</AppButton>
-        <span class="text-xs text-theme-muted">{{ authStore.user?.displayName }}</span>
+        <span class="hidden md:inline text-xs text-theme-muted">{{ authStore.user?.displayName }}</span>
       </div>
     </header>
 

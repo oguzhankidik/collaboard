@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { DrawElement, ToolType, Point } from '@/types'
-import { ZOOM_MIN, ZOOM_MAX } from '@/constants'
+import { ZOOM_MIN, ZOOM_MAX, BOARD_SIZE } from '@/constants'
 
 export const DEFAULT_ERASER_SIZE = 16
 
@@ -24,8 +24,9 @@ export const useCanvasStore = defineStore('canvas', () => {
   }
 
   function setPan(x: number, y: number) {
-    panX.value = x
-    panY.value = y
+    const half = BOARD_SIZE / 2
+    panX.value = Math.min(half, Math.max(-half, x))
+    panY.value = Math.min(half, Math.max(-half, y))
   }
 
   function resetView() {

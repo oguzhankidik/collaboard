@@ -5,6 +5,7 @@ import type { Socket } from 'socket.io-client'
 import type { DrawElement, Point } from '@/types'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useRoomStore } from '@/stores/roomStore'
 import {
   useCanvas,
   hitTestElement,
@@ -17,6 +18,7 @@ import CursorOverlay from './CursorOverlay.vue'
 import ToolBar from './ToolBar.vue'
 import ParticipantPanel from './ParticipantPanel.vue'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
+import Minimap from './Minimap.vue'
 
 const props = defineProps<{ socket: Socket | null }>()
 
@@ -29,6 +31,7 @@ const activeCanvasRef = ref<HTMLCanvasElement | null>(null)
 
 const canvasStore = useCanvasStore()
 const authStore = useAuthStore()
+const roomStore = useRoomStore()
 const { redrawStatic, redrawActive, redrawActiveAll, canvasPoint } = useCanvas(
   staticCanvasRef,
   activeCanvasRef,
@@ -63,6 +66,17 @@ const panStartOffset = ref<Point>({ x: 0, y: 0 })
 
 // Whether eraser is actively being drawn (active canvas shows full render, static hidden)
 const isEraserDrawing = ref(false)
+
+// Mobile drawer state
+const showMobileParticipants = ref(false)
+const showMobileChat = ref(false)
+
+// Pinch-to-zoom state (plain let — not reactive)
+const activePinchPointers = new Map<number, PointerEvent>()
+let pinchStartDistance = 0
+let pinchStartZoom = 0
+let pinchStartMidWorld: Point = { x: 0, y: 0 }
+let pinchStartMidScreen: Point = { x: 0, y: 0 }
 
 // --- RAF handles ---
 let staticFrameId: number | null = null
@@ -180,7 +194,26 @@ function onWheel(e: WheelEvent) {
 }
 
 // --- Drawing events ---
-function onPointerDown(e: MouseEvent) {
+function onPointerDown(e: PointerEvent) {
+  activePinchPointers.set(e.pointerId, e)
+  if (activePinchPointers.size === 2) {
+    const [p1, p2] = [...activePinchPointers.values()]
+    pinchStartDistance = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY)
+    pinchStartZoom = canvasStore.zoom
+    const midX = (p1.clientX + p2.clientX) / 2
+    const midY = (p1.clientY + p2.clientY) / 2
+    const rect = activeCanvasRef.value!.getBoundingClientRect()
+    pinchStartMidScreen = { x: midX - rect.left, y: midY - rect.top }
+    pinchStartMidWorld = {
+      x: pinchStartMidScreen.x / pinchStartZoom + canvasStore.panX,
+      y: pinchStartMidScreen.y / pinchStartZoom + canvasStore.panY,
+    }
+    isDrawing.value = false
+    currentElement.value = null
+    isPanning.value = false
+    return
+  }
+
   if (canvasStore.activeTool === 'hand') {
     isPanning.value = true
     panStartScreen.value = { x: e.clientX, y: e.clientY }
@@ -248,7 +281,21 @@ function onPointerDown(e: MouseEvent) {
   props.socket?.emit('draw:start', element)
 }
 
-function onPointerMove(e: MouseEvent) {
+function onPointerMove(e: PointerEvent) {
+  if (activePinchPointers.has(e.pointerId)) activePinchPointers.set(e.pointerId, e)
+  if (activePinchPointers.size === 2) {
+    const [p1, p2] = [...activePinchPointers.values()]
+    const dist = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY)
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinchStartZoom * (dist / pinchStartDistance)))
+    canvasStore.setZoom(newZoom)
+    canvasStore.setPan(
+      pinchStartMidWorld.x - pinchStartMidScreen.x / newZoom,
+      pinchStartMidWorld.y - pinchStartMidScreen.y / newZoom,
+    )
+    scheduleStaticRender()
+    return
+  }
+
   const now = Date.now()
   const point = canvasPoint(e)
 
@@ -314,7 +361,14 @@ function onPointerMove(e: MouseEvent) {
   }
 }
 
-function onPointerUp() {
+function onPointerUp(e?: PointerEvent) {
+  if (e) activePinchPointers.delete(e.pointerId)
+
+  // Guard: if nothing is active, don't cancel pending renders.
+  // On mobile, pointerleave fires right after pointerup (finger lifted),
+  // causing a second call that would cancel the RAF scheduled by the first call.
+  if (!isDrawing.value && !isPanning.value && !isDragging.value) return
+
   if (staticFrameId !== null) {
     cancelAnimationFrame(staticFrameId)
     staticFrameId = null
@@ -363,7 +417,7 @@ function onPointerUp() {
   scheduleActiveRender()
 }
 
-function handleText(e: MouseEvent) {
+function handleText(e: PointerEvent) {
   const rect = activeCanvasRef.value!.getBoundingClientRect()
   const screenX = e.clientX - rect.left
   const screenY = e.clientY - rect.top
@@ -444,10 +498,11 @@ function onTextKeydown(e: KeyboardEvent) {
                   ? 'cursor-grab'
                   : 'cursor-default'
       "
-      @mousedown="onPointerDown"
-      @mousemove="onPointerMove"
-      @mouseup="onPointerUp"
-      @mouseleave="onPointerUp"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointerleave="onPointerUp"
+      @pointercancel="onPointerUp"
       @wheel.prevent="onWheel"
     />
 
@@ -469,16 +524,84 @@ function onTextKeydown(e: KeyboardEvent) {
       @blur="commitTextFromInput"
     />
 
+    <Minimap :main-canvas="activeCanvasRef" />
+
     <CursorOverlay :socket="props.socket" />
 
-    <div class="absolute top-3 right-3 z-30 flex flex-col gap-2 items-end">
+    <!-- Desktop panels -->
+    <div class="hidden md:flex absolute top-3 right-3 z-30 flex-col gap-2 items-end">
       <ParticipantPanel />
       <ChatPanel :socket="props.socket" :room-id="roomId" class="w-[180px]" />
     </div>
+
+    <!-- Mobile FAB toggles -->
+    <div class="flex md:hidden absolute bottom-16 right-3 z-30 flex-col gap-2">
+      <button class="panel-fab" @click="showMobileParticipants = !showMobileParticipants">
+        ■ {{ roomStore.lobbyParticipants.length }}
+      </button>
+      <button class="panel-fab" @click="showMobileChat = !showMobileChat">
+        ■ CHAT
+      </button>
+    </div>
+
+    <!-- Mobile drawer backdrop -->
+    <div
+      v-if="showMobileParticipants || showMobileChat"
+      class="md:hidden absolute inset-0 z-30 bg-black/50"
+      @pointerdown.stop="showMobileParticipants = false; showMobileChat = false"
+    />
+
+    <!-- Mobile participants drawer -->
+    <Transition
+      enter-active-class="transition-transform duration-200 ease-out"
+      enter-from-class="translate-x-full"
+      enter-to-class="translate-x-0"
+      leave-active-class="transition-transform duration-200 ease-in"
+      leave-from-class="translate-x-0"
+      leave-to-class="translate-x-full"
+    >
+      <div v-if="showMobileParticipants" class="md:hidden absolute top-0 right-0 bottom-0 w-64 z-40">
+        <ParticipantPanel />
+      </div>
+    </Transition>
+
+    <!-- Mobile chat drawer -->
+    <Transition
+      enter-active-class="transition-transform duration-200 ease-out"
+      enter-from-class="translate-x-full"
+      enter-to-class="translate-x-0"
+      leave-active-class="transition-transform duration-200 ease-in"
+      leave-from-class="translate-x-0"
+      leave-to-class="translate-x-full"
+    >
+      <div v-if="showMobileChat" class="md:hidden absolute top-0 right-0 bottom-0 w-64 z-40">
+        <ChatPanel :socket="props.socket" :room-id="roomId" />
+      </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
+.whiteboard-canvas-layer {
+  touch-action: none;
+}
+
+.panel-fab {
+  padding: 0.375rem 0.625rem;
+  background-color: var(--color-surface-2);
+  border: 2px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.panel-fab:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
 .text-input-overlay {
   position: absolute;
   z-index: 50;

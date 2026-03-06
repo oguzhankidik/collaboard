@@ -12,6 +12,7 @@ import { registerDrawingHandlers } from './handlers/drawingHandler'
 import { registerCursorHandlers } from './handlers/cursorHandler'
 import { registerChatHandlers } from './handlers/chatHandler'
 import { RoomModel } from './models/Room'
+import { BoardModel } from './models/Board'
 import type { Room, RoomStatus, ChatMessage, RoomSettings } from './types'
 
 const PORT = Number(process.env.PORT ?? 3000)
@@ -42,13 +43,19 @@ app.get('/health', (_req, res) => {
 
 // REST: list rooms
 app.get('/rooms', async (_req, res) => {
+  const liveCount = (roomId: string) => lobbyParticipants.get(roomId)?.size ?? 0
+
   if (useMemory()) {
-    res.json([...memoryRooms].filter(r => !r.isPrivate).reverse())
+    const rooms = [...memoryRooms]
+      .filter(r => !r.isPrivate)
+      .reverse()
+      .map(r => ({ ...r, participants: Array(liveCount(r.id)).fill('') }))
+    res.json(rooms)
     return
   }
   try {
     const rooms = await RoomModel.find({ isPrivate: { $ne: true } }).sort({ createdAt: -1 }).limit(50)
-    res.json(rooms)
+    res.json(rooms.map(r => ({ ...r.toObject(), participants: Array(liveCount(r.id)).fill('') })))
   } catch {
     res.status(500).json({ error: 'Failed to fetch rooms' })
   }
@@ -119,6 +126,21 @@ async function start() {
   } else {
     await mongoose.connect(MONGODB_URI)
     console.log('[mongo] connected')
+    // Delete rooms (and their boards) that had no activity in the last 24 hours.
+    // Must run BEFORE the participants cleanup to avoid updatedAt being reset to now.
+    const STALE_ROOM_TTL_MS = 24 * 60 * 60 * 1000
+    const cutoff = new Date(Date.now() - STALE_ROOM_TTL_MS)
+    const staleRooms = await RoomModel.find({ updatedAt: { $lt: cutoff } }, { id: 1 })
+    if (staleRooms.length > 0) {
+      const staleIds = staleRooms.map((r) => r.id as string)
+      await RoomModel.deleteMany({ updatedAt: { $lt: cutoff } })
+      await BoardModel.deleteMany({ roomId: { $in: staleIds } })
+      console.log(`[mongo] deleted ${staleRooms.length} stale room(s)`)
+    }
+
+    // Clear stale participant lists — socket connections don't survive restarts
+    await RoomModel.updateMany({}, { $set: { participants: [] } }, { timestamps: false })
+    console.log('[mongo] cleared stale participants on startup')
   }
 
   httpServer.listen(PORT, () => {

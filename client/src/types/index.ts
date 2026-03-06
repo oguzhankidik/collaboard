@@ -1,4 +1,4 @@
-export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'text' | 'select' | 'hand' | 'fill'
+export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'line' | 'text' | 'select' | 'hand' | 'fill'
 
 export type RoomStatus = 'waiting' | 'started'
 
