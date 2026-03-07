@@ -11,17 +11,34 @@ const minimapRef = ref<HTMLCanvasElement | null>(null)
 let ctx: CanvasRenderingContext2D | null = null
 let frameId: number | null = null
 
-function getContentBounds() {
+// ── Offscreen element cache ─────────────────────────────────────────────────
+// Elements are drawn once to an offscreen canvas; re-rendered only when elements
+// actually change (not on pan/zoom). Pan/zoom only redraws the cheap viewport rect.
+let elementCache: OffscreenCanvas | null = null
+let cacheScale = 1
+let cacheOffsetX = 0
+let cacheOffsetY = 0
+let cacheMinX = 0
+let cacheMinY = 0
+
+function renderElementCache() {
+  const SIZE = MINIMAP_W
+  if (!elementCache) elementCache = new OffscreenCanvas(SIZE, SIZE)
+  const c = elementCache.getContext('2d')!
+  c.clearRect(0, 0, SIZE, SIZE)
+
   const els = canvasStore.elements
-  const mw = props.mainCanvas?.width ?? window.innerWidth
-  const mh = props.mainCanvas?.height ?? window.innerHeight
+  if (els.length === 0) {
+    cacheScale = 1
+    cacheOffsetX = SIZE / 2
+    cacheOffsetY = SIZE / 2
+    cacheMinX = 0
+    cacheMinY = 0
+    return
+  }
 
-  // Start from viewport bounds so the viewport rect is always visible
-  let minX = canvasStore.panX
-  let minY = canvasStore.panY
-  let maxX = canvasStore.panX + mw / canvasStore.zoom
-  let maxY = canvasStore.panY + mh / canvasStore.zoom
-
+  // Compute bounds from elements only (viewport position intentionally excluded)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const el of els) {
     const b = getElementBounds(el)
     const pad = el.strokeWidth
@@ -30,52 +47,59 @@ function getContentBounds() {
     maxX = Math.max(maxX, b.x + b.w + pad)
     maxY = Math.max(maxY, b.y + b.h + pad)
   }
+  minX -= MINIMAP_PADDING
+  minY -= MINIMAP_PADDING
+  maxX += MINIMAP_PADDING
+  maxY += MINIMAP_PADDING
 
-  return {
-    minX: minX - MINIMAP_PADDING,
-    minY: minY - MINIMAP_PADDING,
-    maxX: maxX + MINIMAP_PADDING,
-    maxY: maxY + MINIMAP_PADDING,
-  }
-}
-
-function draw() {
-  if (!ctx) return
-  const c = ctx
-  const SIZE = MINIMAP_W
-  c.clearRect(0, 0, SIZE, SIZE)
-
-  const { minX, minY, maxX, maxY } = getContentBounds()
   const contentW = maxX - minX
   const contentH = maxY - minY
   const scale = Math.min(SIZE / contentW, SIZE / contentH)
   const offsetX = (SIZE - contentW * scale) / 2
   const offsetY = (SIZE - contentH * scale) / 2
 
+  cacheScale = scale
+  cacheOffsetX = offsetX
+  cacheOffsetY = offsetY
+  cacheMinX = minX
+  cacheMinY = minY
+
   c.save()
   c.translate(offsetX, offsetY)
   c.scale(scale, scale)
   c.translate(-minX, -minY)
 
-  // Draw elements — skip 'fill' (pixel-based flood fill is incompatible with scaled context)
-  // Skip 'eraser' — uses destination-out which produces black blobs on transparent background
-  for (const el of canvasStore.elements) {
+  for (const el of els) {
     if (el.type === 'fill' || el.type === 'eraser') continue
     drawElement(c, el)
   }
+  c.restore()
+}
 
-  // Viewport indicator rect
+// ── Draw: blit cache + viewport rect (O(1) during pan) ─────────────────────
+function draw() {
+  if (!ctx) return
+  const c = ctx
+  const SIZE = MINIMAP_W
+  c.clearRect(0, 0, SIZE, SIZE)
+
+  if (elementCache) {
+    c.drawImage(elementCache, 0, 0)
+  }
+
+  // Viewport indicator — positioned using the same cached coordinate system
   const mw = props.mainCanvas?.width ?? window.innerWidth
   const mh = props.mainCanvas?.height ?? window.innerHeight
   const vw = mw / canvasStore.zoom
   const vh = mh / canvasStore.zoom
-  c.strokeStyle = 'rgba(108, 99, 255, 0.9)'
-  c.lineWidth = 2 / scale
-  c.strokeRect(canvasStore.panX, canvasStore.panY, vw, vh)
-  c.fillStyle = 'rgba(108, 99, 255, 0.08)'
-  c.fillRect(canvasStore.panX, canvasStore.panY, vw, vh)
+  const vx = (canvasStore.panX - cacheMinX) * cacheScale + cacheOffsetX
+  const vy = (canvasStore.panY - cacheMinY) * cacheScale + cacheOffsetY
 
-  c.restore()
+  c.strokeStyle = 'rgba(108, 99, 255, 0.9)'
+  c.lineWidth = 2
+  c.strokeRect(vx, vy, vw * cacheScale, vh * cacheScale)
+  c.fillStyle = 'rgba(108, 99, 255, 0.08)'
+  c.fillRect(vx, vy, vw * cacheScale, vh * cacheScale)
 }
 
 function scheduleDraw() {
@@ -86,15 +110,21 @@ function scheduleDraw() {
   })
 }
 
-watch(
-  () => [canvasStore.elements.length, canvasStore.elements, canvasStore.zoom, canvasStore.panX, canvasStore.panY] as const,
-  scheduleDraw,
-)
+function scheduleFullRedraw() {
+  renderElementCache()
+  scheduleDraw()
+}
+
+// Elements changed → re-render element cache
+watch(() => canvasStore.elements, scheduleFullRedraw, { deep: true })
+
+// Pan/zoom → only update viewport rect (cheap, no element loop)
+watch(() => [canvasStore.panX, canvasStore.panY, canvasStore.zoom] as const, scheduleDraw)
 
 onMounted(() => {
   if (minimapRef.value) {
     ctx = minimapRef.value.getContext('2d')
-    scheduleDraw()
+    scheduleFullRedraw()
   }
 })
 

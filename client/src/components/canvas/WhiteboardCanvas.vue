@@ -13,6 +13,7 @@ import {
   invalidateBounds,
   clearBoundsCache,
 } from '@/composables/useCanvas'
+import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import { CURSOR_THROTTLE_MS, ZOOM_MIN, ZOOM_MAX, ZOOM_WHEEL_FACTOR } from '@/constants'
 import CursorOverlay from './CursorOverlay.vue'
 import ToolBar from './ToolBar.vue'
@@ -53,6 +54,9 @@ const isHoveringElement = ref(false)
 let dragStart: Point | null = null
 let dragOriginPoints: Point[] = []
 let hasMovedDuringDrag = false
+// Drag preview: local copy of the element being moved (not committed to store until pointer up)
+let dragPreview: DrawElement | null = null
+let dragExcludeId: string | null = null
 
 // Inline text input state
 const textInput = ref<{ x: number; y: number; worldPoint: { x: number; y: number } } | null>(null)
@@ -63,6 +67,9 @@ const textInputValue = ref('')
 const isPanning = ref(false)
 const panStartScreen = ref<Point>({ x: 0, y: 0 })
 const panStartOffset = ref<Point>({ x: 0, y: 0 })
+// Last pan delta — used to commit final position on pointer up
+let panLastDx = 0
+let panLastDy = 0
 
 // Whether eraser is actively being drawn (active canvas shows full render, static hidden)
 const isEraserDrawing = ref(false)
@@ -78,6 +85,42 @@ let pinchStartZoom = 0
 let pinchStartMidWorld: Point = { x: 0, y: 0 }
 let pinchStartMidScreen: Point = { x: 0, y: 0 }
 
+// --- Keyboard shortcuts ---
+const { isSpaceDown } = useKeyboardShortcuts({
+  onDeleteSelected() {
+    if (!selectedElementId.value) return
+    const id = selectedElementId.value
+    canvasStore.snapshotHistory()
+    canvasStore.removeElement(id)
+    invalidateBounds(id)
+    selectedElementId.value = null
+    props.socket?.emit('draw:remove', id)
+    scheduleStaticRender()
+  },
+  onDuplicateSelected() {
+    if (!selectedElementId.value) return
+    const src = canvasStore.elements.find((e) => e.id === selectedElementId.value)
+    if (!src) return
+    const copy: DrawElement = {
+      ...src,
+      id: crypto.randomUUID(),
+      points: src.points.map((p) => ({ x: p.x + 24, y: p.y + 24 })),
+      createdAt: Date.now(),
+    }
+    canvasStore.addElement(copy)
+    cacheElementBounds(copy)
+    selectedElementId.value = copy.id
+    props.socket?.emit('draw:end', copy)
+    scheduleStaticRender()
+  },
+  onEscape() {
+    selectedElementId.value = null
+    textInput.value = null
+    textInputValue.value = ''
+    scheduleStaticRender()
+  },
+})
+
 // --- RAF handles ---
 let staticFrameId: number | null = null
 let activeFrameId: number | null = null
@@ -86,7 +129,11 @@ function scheduleStaticRender() {
   if (staticFrameId !== null) return
   staticFrameId = requestAnimationFrame(() => {
     staticFrameId = null
-    redrawStatic(canvasStore.elements, selectedElementId.value)
+    // During drag: exclude the moving element from the static canvas
+    const elements = dragExcludeId
+      ? canvasStore.elements.filter((e) => e.id !== dragExcludeId)
+      : canvasStore.elements
+    redrawStatic(elements, selectedElementId.value)
   })
 }
 
@@ -94,7 +141,8 @@ function scheduleActiveRender() {
   if (activeFrameId !== null) return
   activeFrameId = requestAnimationFrame(() => {
     activeFrameId = null
-    redrawActive(currentElement.value, remoteInProgress)
+    // During drag: show the preview element on the active canvas (O(1), no store update)
+    redrawActive(dragPreview ?? currentElement.value, remoteInProgress)
   })
 }
 
@@ -135,6 +183,13 @@ onMounted(() => {
       remoteInProgress.delete(userId)
       scheduleActiveRender()
     }
+  })
+
+  props.socket?.on('draw:removed', (elementId: string) => {
+    canvasStore.removeElement(elementId)
+    invalidateBounds(elementId)
+    if (selectedElementId.value === elementId) selectedElementId.value = null
+    scheduleStaticRender()
   })
 
   props.socket?.on('board:cleared', () => {
@@ -214,7 +269,7 @@ function onPointerDown(e: PointerEvent) {
     return
   }
 
-  if (canvasStore.activeTool === 'hand') {
+  if (canvasStore.activeTool === 'hand' || isSpaceDown.value) {
     isPanning.value = true
     panStartScreen.value = { x: e.clientX, y: e.clientY }
     panStartOffset.value = { x: canvasStore.panX, y: canvasStore.panY }
@@ -231,6 +286,9 @@ function onPointerDown(e: PointerEvent) {
       dragOriginPoints = hit.points.map((p) => ({ ...p }))
       hasMovedDuringDrag = false
       invalidateBounds(hit.id)
+      // Exclude from static canvas, show on active canvas as preview
+      dragExcludeId = hit.id
+      dragPreview = { ...hit, points: hit.points.map((p) => ({ ...p })) }
     }
     scheduleStaticRender()
     return
@@ -306,13 +364,12 @@ function onPointerMove(e: PointerEvent) {
   }
 
   if (isPanning.value) {
-    const dx = e.clientX - panStartScreen.value.x
-    const dy = e.clientY - panStartScreen.value.y
-    canvasStore.setPan(
-      panStartOffset.value.x - dx / canvasStore.zoom,
-      panStartOffset.value.y - dy / canvasStore.zoom,
-    )
-    scheduleStaticRender()
+    panLastDx = e.clientX - panStartScreen.value.x
+    panLastDy = e.clientY - panStartScreen.value.y
+    // CSS transform: GPU-accelerated, zero canvas redraw during pan
+    const t = `translate(${panLastDx}px, ${panLastDy}px)`
+    if (staticCanvasRef.value) staticCanvasRef.value.style.transform = t
+    if (activeCanvasRef.value) activeCanvasRef.value.style.transform = t
     return
   }
 
@@ -327,10 +384,10 @@ function onPointerMove(e: PointerEvent) {
       const dx = point.x - dragStart.x
       const dy = point.y - dragStart.y
       const newPoints = dragOriginPoints.map((p) => ({ x: p.x + dx, y: p.y + dy }))
-      const el = canvasStore.elements.find((e) => e.id === selectedElementId.value)
-      if (el) {
-        canvasStore.updateElement({ ...el, points: newPoints })
-        scheduleStaticRender()
+      if (dragPreview) {
+        // Update local preview only — no store write, no static redraw
+        dragPreview = { ...dragPreview, points: newPoints }
+        scheduleActiveRender()
       }
     }
     return
@@ -380,22 +437,36 @@ function onPointerUp(e?: PointerEvent) {
 
   if (isPanning.value) {
     isPanning.value = false
+    // Remove CSS transform and commit final pan position to store in one shot
+    if (staticCanvasRef.value) staticCanvasRef.value.style.transform = ''
+    if (activeCanvasRef.value) activeCanvasRef.value.style.transform = ''
+    canvasStore.setPan(
+      panStartOffset.value.x - panLastDx / canvasStore.zoom,
+      panStartOffset.value.y - panLastDy / canvasStore.zoom,
+    )
+    panLastDx = 0
+    panLastDy = 0
+    scheduleStaticRender()
     return
   }
 
   if (canvasStore.activeTool === 'select') {
-    if (isDragging.value && selectedElementId.value && hasMovedDuringDrag) {
-      const el = canvasStore.elements.find((e) => e.id === selectedElementId.value)
-      if (el) {
-        cacheElementBounds(el)
-        props.socket?.emit('draw:end', el)
-      }
+    if (isDragging.value && selectedElementId.value && hasMovedDuringDrag && dragPreview) {
+      // Commit the final dragged position to store in one shot
+      dragExcludeId = null
+      canvasStore.updateElement(dragPreview)
+      cacheElementBounds(dragPreview)
+      props.socket?.emit('draw:end', dragPreview)
+    } else {
+      dragExcludeId = null
     }
+    dragPreview = null
     isDragging.value = false
     dragStart = null
     dragOriginPoints = []
     hasMovedDuringDrag = false
     scheduleStaticRender()
+    scheduleActiveRender()
     return
   }
 
@@ -484,7 +555,7 @@ function onTextKeydown(e: KeyboardEvent) {
       ref="activeCanvasRef"
       class="whiteboard-canvas-layer absolute inset-0 w-full h-full"
       :class="
-        canvasStore.activeTool === 'hand'
+        canvasStore.activeTool === 'hand' || isSpaceDown
           ? isPanning
             ? 'cursor-grabbing'
             : 'cursor-grab'

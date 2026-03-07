@@ -70,6 +70,7 @@ export interface SocketEvents {
   'draw:start': (element: DrawElement) => void
   'draw:update': (element: DrawElement) => void
   'draw:end': (element: DrawElement) => void
+  'draw:remove': (elementId: string) => void
   'cursor:move': (position: Point) => void
   'room:join': (roomId: string) => void
   'room:leave': (roomId: string) => void
@@ -82,6 +83,7 @@ export interface SocketEvents {
   // Server → Client
   'draw:remote': (element: DrawElement) => void
   'draw:committed': (element: DrawElement) => void
+  'draw:removed': (elementId: string) => void
   'cursor:remote': (cursor: RemoteCursor) => void
   'room:state': (elements: DrawElement[]) => void
   'room:lobby': (state: LobbyState) => void
