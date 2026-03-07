@@ -2,6 +2,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import type { Ref } from 'vue'
 import type { DrawElement, Point } from '@/types'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { BOARD_SIZE } from '@/constants'
 
 // --- Bounds cache (module-level, persists across re-renders) ---
 const boundsCache = new Map<string, { x: number; y: number; w: number; h: number }>()
@@ -73,6 +74,7 @@ export function useCanvas(
 
   function isInViewport(el: DrawElement, canvas: HTMLCanvasElement): boolean {
     if (el.points.length === 0) return false
+    if (el.type === 'fill') return true
     const store = useCanvasStore()
     const bounds = getElementBounds(el)
     const PAD = el.strokeWidth
@@ -94,6 +96,16 @@ export function useCanvas(
     c.translate(-store.panX, -store.panY)
   }
 
+  function drawBoardBorder(c: CanvasRenderingContext2D) {
+    const half = BOARD_SIZE / 2
+    c.save()
+    c.strokeStyle = 'rgba(150, 140, 255, 0.35)'
+    c.lineWidth = 3 / useCanvasStore().zoom
+    c.setLineDash([12 / useCanvasStore().zoom, 8 / useCanvasStore().zoom])
+    c.strokeRect(-half, -half, BOARD_SIZE, BOARD_SIZE)
+    c.restore()
+  }
+
   // Draw committed elements onto the static canvas (with viewport culling)
   function redrawStatic(elements: DrawElement[], selectedId?: string | null) {
     const canvas = staticCanvasRef.value
@@ -102,6 +114,7 @@ export function useCanvas(
     c.clearRect(0, 0, canvas.width, canvas.height)
     c.save()
     applyViewTransform(c)
+    drawBoardBorder(c)
     for (const el of elements) {
       if (isInViewport(el, canvas)) {
         drawElement(c, el)
@@ -146,6 +159,7 @@ export function useCanvas(
     c.clearRect(0, 0, canvas.width, canvas.height)
     c.save()
     applyViewTransform(c)
+    drawBoardBorder(c)
     for (const el of elements) {
       if (isInViewport(el, canvas)) {
         drawElement(c, el)
@@ -159,15 +173,13 @@ export function useCanvas(
     c.restore()
   }
 
-  function canvasPoint(e: MouseEvent | TouchEvent): Point {
+  function canvasPoint(e: PointerEvent): Point {
     const canvas = activeCanvasRef.value!
     const rect = canvas.getBoundingClientRect()
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
     const store = useCanvasStore()
     return {
-      x: (clientX - rect.left) / store.zoom + store.panX,
-      y: (clientY - rect.top) / store.zoom + store.panY,
+      x: (e.clientX - rect.left) / store.zoom + store.panX,
+      y: (e.clientY - rect.top) / store.zoom + store.panY,
     }
   }
 
@@ -190,7 +202,7 @@ export function useCanvas(
 
 // --- Drawing helpers ---
 
-function drawElement(c: CanvasRenderingContext2D, element: DrawElement) {
+export function drawElement(c: CanvasRenderingContext2D, element: DrawElement) {
   c.save()
   c.strokeStyle = element.color
   c.lineWidth = element.strokeWidth
@@ -216,8 +228,14 @@ function drawElement(c: CanvasRenderingContext2D, element: DrawElement) {
     case 'arrow':
       drawArrow(c, element.points)
       break
+    case 'line':
+      drawLine(c, element.points)
+      break
     case 'text':
       drawText(c, element)
+      break
+    case 'fill':
+      drawFill(c, element)
       break
     default:
       break
@@ -262,6 +280,16 @@ function drawCircle(c: CanvasRenderingContext2D, points: Point[]) {
   const cy = start.y + ry
   c.beginPath()
   c.ellipse(cx, cy, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2)
+  c.stroke()
+}
+
+function drawLine(c: CanvasRenderingContext2D, points: Point[]) {
+  if (points.length < 2) return
+  const from = points[0]
+  const to = points[points.length - 1]
+  c.beginPath()
+  c.moveTo(from.x, from.y)
+  c.lineTo(to.x, to.y)
   c.stroke()
 }
 
@@ -310,4 +338,76 @@ function drawText(c: CanvasRenderingContext2D, element: DrawElement) {
   c.font = `${element.strokeWidth * 8 + 12}px sans-serif`
   c.fillStyle = element.color
   c.fillText(element.text, x, y)
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const c = hex.replace('#', '')
+  return {
+    r: parseInt(c.slice(0, 2), 16),
+    g: parseInt(c.slice(2, 4), 16),
+    b: parseInt(c.slice(4, 6), 16),
+  }
+}
+
+function floodFillImageData(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  startX: number,
+  startY: number,
+  fillR: number,
+  fillG: number,
+  fillB: number,
+  tolerance: number,
+): void {
+  const startPos = startY * width + startX
+  const si = startPos * 4
+  const tR = data[si], tG = data[si + 1], tB = data[si + 2], tA = data[si + 3]
+
+  if (tR === fillR && tG === fillG && tB === fillB && tA === 255) return
+
+  const visited = new Uint8Array(width * height)
+  const stack: number[] = [startPos]
+  const MAX_PIXELS = 4_000_000
+  let filled = 0
+
+  while (stack.length > 0 && filled < MAX_PIXELS) {
+    const pos = stack.pop()!
+    if (visited[pos]) continue
+    visited[pos] = 1
+
+    const i = pos * 4
+    if (
+      Math.abs(data[i]     - tR) > tolerance ||
+      Math.abs(data[i + 1] - tG) > tolerance ||
+      Math.abs(data[i + 2] - tB) > tolerance ||
+      Math.abs(data[i + 3] - tA) > tolerance
+    ) continue
+
+    data[i] = fillR; data[i + 1] = fillG; data[i + 2] = fillB; data[i + 3] = 255
+    filled++
+
+    const x = pos % width
+    const y = Math.floor(pos / width)
+    if (x > 0)          stack.push(pos - 1)
+    if (x < width - 1)  stack.push(pos + 1)
+    if (y > 0)          stack.push(pos - width)
+    if (y < height - 1) stack.push(pos + width)
+  }
+}
+
+function drawFill(c: CanvasRenderingContext2D, element: DrawElement): void {
+  const seed = element.points[0]
+  if (!seed) return
+  const store = useCanvasStore()
+  const canvas = c.canvas
+
+  const px = Math.round((seed.x - store.panX) * store.zoom)
+  const py = Math.round((seed.y - store.panY) * store.zoom)
+  if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) return
+
+  const imageData = c.getImageData(0, 0, canvas.width, canvas.height)
+  const { r, g, b } = hexToRgb(element.color)
+  floodFillImageData(imageData.data, canvas.width, canvas.height, px, py, r, g, b, 30)
+  c.putImageData(imageData, 0, 0)
 }

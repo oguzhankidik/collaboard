@@ -2,9 +2,73 @@ import type { Server } from 'socket.io'
 import type { AuthenticatedSocket } from '../middleware/authMiddleware'
 import { RoomModel } from '../models/Room'
 import { BoardModel } from '../models/Board'
-import type { Room, RoomStatus, ChatMessage } from '../types'
+import type { Room, RoomStatus, ChatMessage, RoomSettings } from '../types'
 
 const MAX_PARTICIPANTS = 20
+const VALID_TIMER_DURATIONS_MS = new Set([0, 300_000, 600_000, 900_000, 1_800_000, 3_600_000])
+const ROOM_DELETION_GRACE_MS = 15_000
+
+function cancelRoomTimer(roomId: string, roomTimers: Map<string, ReturnType<typeof setTimeout>>): void {
+  const h = roomTimers.get(roomId)
+  if (h !== undefined) {
+    clearTimeout(h)
+    roomTimers.delete(roomId)
+  }
+}
+
+function startRoomTimer(
+  io: Server,
+  roomId: string,
+  durationMs: number,
+  roomStatuses: Map<string, RoomStatus>,
+  roomTimers: Map<string, ReturnType<typeof setTimeout>>,
+  useMemory: () => boolean,
+): void {
+  cancelRoomTimer(roomId, roomTimers)
+  const handle = setTimeout(async () => {
+    roomTimers.delete(roomId)
+    roomStatuses.set(roomId, 'waiting')
+    if (!useMemory()) {
+      try {
+        await RoomModel.updateOne({ id: roomId }, { status: 'waiting' })
+        await BoardModel.updateOne({ roomId }, { $set: { elements: [] } })
+      } catch {
+        // Ignore DB errors on timer expiry
+      }
+    }
+    io.to(roomId).emit('room:time_up')
+  }, durationMs)
+  roomTimers.set(roomId, handle)
+}
+
+async function deleteRoom(
+  roomId: string,
+  memoryRooms: Room[],
+  lobbyParticipants: Map<string, Map<string, string>>,
+  roomStatuses: Map<string, RoomStatus>,
+  roomMessages: Map<string, ChatMessage[]>,
+  roomSettings: Map<string, RoomSettings>,
+  roomTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomSessionStartAt: Map<string, number>,
+  roomDeletionTimers: Map<string, ReturnType<typeof setTimeout>>,
+  useMemory: () => boolean,
+): Promise<void> {
+  cancelRoomTimer(roomId, roomTimers)
+  roomDeletionTimers.delete(roomId)
+  lobbyParticipants.delete(roomId)
+  roomStatuses.delete(roomId)
+  roomMessages.delete(roomId)
+  roomSettings.delete(roomId)
+  roomSessionStartAt.delete(roomId)
+
+  if (useMemory()) {
+    const idx = memoryRooms.findIndex((r) => r.id === roomId)
+    if (idx !== -1) memoryRooms.splice(idx, 1)
+  } else {
+    await RoomModel.deleteOne({ id: roomId })
+    await BoardModel.deleteOne({ roomId })
+  }
+}
 
 async function handleParticipantLeave(
   io: Server,
@@ -14,6 +78,10 @@ async function handleParticipantLeave(
   lobbyParticipants: Map<string, Map<string, string>>,
   roomStatuses: Map<string, RoomStatus>,
   roomMessages: Map<string, ChatMessage[]>,
+  roomSettings: Map<string, RoomSettings>,
+  roomTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomSessionStartAt: Map<string, number>,
+  roomDeletionTimers: Map<string, ReturnType<typeof setTimeout>>,
   useMemory: () => boolean,
 ): Promise<void> {
   // Determine current owner before removing participant
@@ -40,18 +108,12 @@ async function handleParticipantLeave(
   const remaining = [...(names?.keys() ?? [])]
 
   if (remaining.length === 0) {
-    // Last person left — clean up the room entirely
-    lobbyParticipants.delete(roomId)
-    roomStatuses.delete(roomId)
-    roomMessages.delete(roomId)
-
-    if (useMemory()) {
-      const idx = memoryRooms.findIndex((r) => r.id === roomId)
-      if (idx !== -1) memoryRooms.splice(idx, 1)
-    } else {
-      await RoomModel.deleteOne({ id: roomId })
-      await BoardModel.deleteOne({ roomId })
-    }
+    // Last person left — wait before deleting to allow page-refresh reconnects
+    const handle = setTimeout(() => {
+      deleteRoom(roomId, memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
+        roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers, useMemory)
+    }, ROOM_DELETION_GRACE_MS)
+    roomDeletionTimers.set(roomId, handle)
   } else if (currentOwnerId === userId) {
     // Host left and others remain — transfer to earliest joined participant
     const newOwnerId = remaining[0]
@@ -74,6 +136,10 @@ export function registerRoomHandlers(
   lobbyParticipants: Map<string, Map<string, string>>,
   roomStatuses: Map<string, RoomStatus>,
   roomMessages: Map<string, ChatMessage[]>,
+  roomSettings: Map<string, RoomSettings>,
+  roomTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomSessionStartAt: Map<string, number>,
+  roomDeletionTimers: Map<string, ReturnType<typeof setTimeout>>,
   useMemory: () => boolean,
 ): void {
   socket.on('room:join', async (roomId: string) => {
@@ -117,6 +183,13 @@ export function registerRoomHandlers(
         return
       }
 
+      // Cancel pending deletion if this room was counting down
+      const deletionHandle = roomDeletionTimers.get(roomId)
+      if (deletionHandle !== undefined) {
+        clearTimeout(deletionHandle)
+        roomDeletionTimers.delete(roomId)
+      }
+
       await socket.join(roomId)
 
       if (!useMemory()) {
@@ -133,9 +206,15 @@ export function registerRoomHandlers(
       // Get room status
       const status = roomStatuses.get(roomId) ?? (room.status ?? 'waiting')
 
-      // Send lobby state to joining user
+      // Send lobby state to joining user (enriched with settings + sessionStartedAt)
       const participants = [...names.entries()].map(([id, name]) => ({ id, name }))
-      socket.emit('room:lobby', { participants, status, ownerId: room.ownerId })
+      socket.emit('room:lobby', {
+        participants,
+        status,
+        ownerId: room.ownerId,
+        settings: roomSettings.get(roomId) ?? { timerDurationMs: 0 },
+        sessionStartedAt: status === 'started' ? roomSessionStartAt.get(roomId) : undefined,
+      })
 
       // Send chat history to joining user
       socket.emit('chat:history', roomMessages.get(roomId) ?? [])
@@ -158,8 +237,13 @@ export function registerRoomHandlers(
     }
   })
 
-  socket.on('room:start', async (roomId: string) => {
+  socket.on('room:start', async (payload: { roomId: string; settings: RoomSettings }) => {
     try {
+      const { roomId, settings } = payload
+
+      // Validate timer duration
+      if (!VALID_TIMER_DURATIONS_MS.has(settings.timerDurationMs)) return
+
       let ownerId: string | undefined
 
       if (useMemory()) {
@@ -172,13 +256,20 @@ export function registerRoomHandlers(
 
       if (!ownerId || ownerId !== socket.userId) return
 
+      roomSettings.set(roomId, settings)
+      const startedAt = Date.now()
+      roomSessionStartAt.set(roomId, startedAt)
       roomStatuses.set(roomId, 'started')
 
       if (!useMemory()) {
         await RoomModel.updateOne({ id: roomId }, { status: 'started' })
       }
 
-      io.to(roomId).emit('room:started')
+      io.to(roomId).emit('room:started', { settings, startedAt })
+
+      if (settings.timerDurationMs > 0) {
+        startRoomTimer(io, roomId, settings.timerDurationMs, roomStatuses, roomTimers, useMemory)
+      }
     } catch {
       // Silently ignore
     }
@@ -198,6 +289,7 @@ export function registerRoomHandlers(
 
       if (!ownerId || ownerId !== socket.userId) return
 
+      cancelRoomTimer(roomId, roomTimers)
       roomStatuses.set(roomId, 'waiting')
 
       if (!useMemory()) {
@@ -225,21 +317,10 @@ export function registerRoomHandlers(
 
       if (!ownerId || ownerId !== socket.userId) return
 
-      // Notify everyone first, then clean up
+      // Notify everyone first, then clean up immediately (explicit close)
       io.to(roomId).emit('room:closed')
-
-      // Remove from in-memory stores
-      lobbyParticipants.delete(roomId)
-      roomStatuses.delete(roomId)
-      roomMessages.delete(roomId)
-
-      if (useMemory()) {
-        const idx = memoryRooms.findIndex((r) => r.id === roomId)
-        if (idx !== -1) memoryRooms.splice(idx, 1)
-      } else {
-        await RoomModel.deleteOne({ id: roomId })
-        await BoardModel.deleteOne({ roomId })
-      }
+      await deleteRoom(roomId, memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
+        roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers, useMemory)
     } catch {
       // Silently ignore
     }
@@ -273,7 +354,8 @@ export function registerRoomHandlers(
     await socket.leave(roomId)
     await handleParticipantLeave(
       io, socket.userId, roomId,
-      memoryRooms, lobbyParticipants, roomStatuses, roomMessages, useMemory,
+      memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
+      roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers, useMemory,
     )
     ack?.()
   })
@@ -283,7 +365,8 @@ export function registerRoomHandlers(
       if (roomId === socket.id) continue
       await handleParticipantLeave(
         io, socket.userId, roomId,
-        memoryRooms, lobbyParticipants, roomStatuses, roomMessages, useMemory,
+        memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
+        roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers, useMemory,
       )
     }
   })

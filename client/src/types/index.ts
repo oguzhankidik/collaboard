@@ -1,4 +1,4 @@
-export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'text' | 'select' | 'hand'
+export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'line' | 'text' | 'select' | 'hand' | 'fill'
 
 export type RoomStatus = 'waiting' | 'started'
 
@@ -30,10 +30,16 @@ export interface Participant {
   name: string
 }
 
+export interface RoomSettings {
+  timerDurationMs: number  // 0 = no timer
+}
+
 export interface LobbyState {
   participants: Participant[]
   status: RoomStatus
   ownerId: string
+  settings: RoomSettings
+  sessionStartedAt?: number  // epoch ms, only when status === 'started'
 }
 
 export interface Room {
@@ -64,10 +70,11 @@ export interface SocketEvents {
   'draw:start': (element: DrawElement) => void
   'draw:update': (element: DrawElement) => void
   'draw:end': (element: DrawElement) => void
+  'draw:remove': (elementId: string) => void
   'cursor:move': (position: Point) => void
   'room:join': (roomId: string) => void
   'room:leave': (roomId: string) => void
-  'room:start': (roomId: string) => void
+  'room:start': (payload: { roomId: string; settings: RoomSettings }) => void
   'room:stop': (roomId: string) => void
   'room:close': (roomId: string) => void
   'chat:send': (payload: { roomId: string; message: string }) => void
@@ -76,10 +83,12 @@ export interface SocketEvents {
   // Server → Client
   'draw:remote': (element: DrawElement) => void
   'draw:committed': (element: DrawElement) => void
+  'draw:removed': (elementId: string) => void
   'cursor:remote': (cursor: RemoteCursor) => void
   'room:state': (elements: DrawElement[]) => void
   'room:lobby': (state: LobbyState) => void
-  'room:started': () => void
+  'room:started': (payload: { settings: RoomSettings; startedAt: number }) => void
+  'room:time_up': () => void
   'room:stopped': () => void
   'room:closed': () => void
   'room:host_changed': (newOwnerId: string) => void

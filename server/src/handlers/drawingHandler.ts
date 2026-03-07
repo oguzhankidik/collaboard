@@ -7,7 +7,7 @@ import { RateLimiter } from '../lib/rateLimiter'
 // Max 120 draw events per second per user
 const drawLimiter = new RateLimiter(120, 1000)
 
-const VALID_TYPES = new Set(['pen', 'rect', 'circle', 'arrow', 'text', 'select', 'eraser'])
+const VALID_TYPES = new Set(['pen', 'rect', 'circle', 'arrow', 'line', 'text', 'select', 'eraser', 'fill'])
 const MAX_POINTS = 10_000
 const MAX_TEXT_LENGTH = 1_000
 const MAX_COLOR_LENGTH = 20
@@ -26,6 +26,22 @@ function isValidElement(el: unknown): el is DrawElement {
 
 export function registerDrawingHandlers(_io: Server, socket: AuthenticatedSocket): void {
   socket.on('disconnect', () => drawLimiter.remove(socket.userId))
+
+  socket.on('draw:remove', async (elementId: unknown) => {
+    if (typeof elementId !== 'string' || !elementId) return
+    for (const roomId of socket.rooms) {
+      if (roomId === socket.id) continue
+      socket.to(roomId).emit('draw:removed', elementId)
+      try {
+        await BoardModel.findOneAndUpdate(
+          { roomId },
+          { $pull: { elements: { id: elementId } } },
+        )
+      } catch {
+        // Non-fatal
+      }
+    }
+  })
   socket.on('draw:start', (element: DrawElement) => {
     if (!drawLimiter.allow(socket.userId)) return
     if (!isValidElement(element)) return
