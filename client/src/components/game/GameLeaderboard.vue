@@ -129,8 +129,7 @@ function handleLeave(): void {
           :class="{
             'text-theme-accent-2 text-glow-accent-2': index === 0,
             'text-theme-accent':                      index === 1,
-            'text-theme-muted':                       index === 2,
-            'text-theme-muted':                       index >= 3,
+            'text-theme-muted':                       index >= 2,
           }"
           aria-hidden="true"
         >{{ rankMedal(index + 1) }}</span>

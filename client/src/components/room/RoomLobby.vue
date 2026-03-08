@@ -168,7 +168,7 @@ watch(showMobileChat, (open) => {
                   ? 'mode-card--active-collab'
                   : 'border-theme text-theme-muted hover:border-theme-accent'"
                 @click="selectedGameMode = 'collaborative'"
-                aria-pressed="selectedGameMode === 'collaborative'"
+                :aria-pressed="selectedGameMode === 'collaborative'"
               >
                 <span class="font-pixel text-[10px] tracking-wider leading-none"
                   :class="selectedGameMode === 'collaborative' ? 'text-theme-accent' : ''">
@@ -187,7 +187,7 @@ watch(showMobileChat, (open) => {
                   ? 'mode-card--active-dtw'
                   : 'border-theme text-theme-muted hover:border-theme-accent'"
                 @click="selectedGameMode = 'draw-the-word'"
-                aria-pressed="selectedGameMode === 'draw-the-word'"
+                :aria-pressed="selectedGameMode === 'draw-the-word'"
               >
                 <span class="font-pixel text-[10px] tracking-wider leading-none"
                   :class="selectedGameMode === 'draw-the-word' ? 'text-theme-accent-2' : ''">
