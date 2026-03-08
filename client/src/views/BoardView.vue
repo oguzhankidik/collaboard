@@ -36,6 +36,8 @@ const drawingSubmitted = ref(false)
 const whiteboardCanvasRef = ref<{ captureSnapshot: () => string } | null>(null)
 const currentSlide = ref<GameSlide | null>(null)
 const gameResults = ref<PlayerScore[]>([])
+const slideSnapshots = new Map<string, string>()
+const winnerCanvas = ref('')
 
 onMounted(async () => {
   document.body.classList.add('in-board')
@@ -80,6 +82,8 @@ onMounted(async () => {
     gameWord.value = ''
     currentSlide.value = null
     gameResults.value = []
+    slideSnapshots.clear()
+    winnerCanvas.value = ''
     phase.value = 'lobby'
   })
 
@@ -143,6 +147,7 @@ onMounted(async () => {
 
   // Draw the Word: server sends each player's drawing for review
   socket.value.on('game:slide', (data: GameSlide) => {
+    slideSnapshots.set(data.userId, data.canvasData)
     currentSlide.value = data
     roomStore.setRoomStatus('review')
     phase.value = 'review'
@@ -151,6 +156,7 @@ onMounted(async () => {
   // Draw the Word: all slides shown — show leaderboard (Phase 5)
   socket.value.on('game:results', (scores: PlayerScore[]) => {
     gameResults.value = scores
+    winnerCanvas.value = scores[0] ? (slideSnapshots.get(scores[0].userId) ?? '') : ''
     roomStore.setRoomStatus('results')
     phase.value = 'results'
   })
@@ -182,6 +188,8 @@ onUnmounted(() => {
   gameWord.value = ''
   currentSlide.value = null
   gameResults.value = []
+  slideSnapshots.clear()
+  winnerCanvas.value = ''
 })
 
 function leaveRoom() {
@@ -258,6 +266,7 @@ function confirmClose() {
     <div v-else-if="phase === 'results'" class="flex-1 overflow-hidden">
       <GameLeaderboard
         :scores="gameResults"
+        :winner-canvas="winnerCanvas"
         :my-user-id="authStore.user?.uid ?? ''"
         :is-owner="isOwner"
         :socket="socket"

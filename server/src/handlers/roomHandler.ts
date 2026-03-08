@@ -7,7 +7,7 @@ import { cancelRoomTimer, startRoomTimer } from '../lib/timerUtils'
 import { triggerReview } from './gameHandler'
 
 const MAX_PARTICIPANTS = 20
-const VALID_TIMER_DURATIONS_MS = new Set([0, 300_000, 600_000, 900_000, 1_800_000, 3_600_000])
+const VALID_TIMER_DURATIONS_MS = new Set([0, 60_000, 120_000, 180_000, 300_000, 600_000])
 const VALID_GAME_MODES = new Set<GameMode>(['collaborative', 'draw-the-word'])
 const ROOM_DELETION_GRACE_MS = 15_000
 const DEFAULT_SETTINGS: RoomSettings = { timerDurationMs: 0, gameMode: 'collaborative' }
@@ -101,6 +101,9 @@ async function handleParticipantLeave(
 
   const remaining = [...(names?.keys() ?? [])]
 
+  const currentStatus = roomStatuses.get(roomId) ?? 'waiting'
+  const isActiveGame = currentStatus !== 'waiting'
+
   if (remaining.length === 0) {
     const handle = setTimeout(() => {
       deleteRoom(
@@ -111,7 +114,7 @@ async function handleParticipantLeave(
       )
     }, ROOM_DELETION_GRACE_MS)
     roomDeletionTimers.set(roomId, handle)
-  } else if (currentOwnerId === userId) {
+  } else if (currentOwnerId === userId && !isActiveGame) {
     const newOwnerId = remaining[0]
 
     if (useMemory()) {

@@ -7,6 +7,7 @@ import type { PlayerScore } from '@/types'
 // 2. Props & Emits
 const props = defineProps<{
   scores: PlayerScore[]
+  winnerCanvas?: string
   myUserId: string
   isOwner: boolean
   socket: Socket | null
@@ -74,131 +75,152 @@ function handleLeave(): void {
     </div>
 
     <!-- ══════════════════════════════════════════════════
-         GAME OVER HEADING
+         MAIN BODY — two-column when winner drawing exists
     ═══════════════════════════════════════════════════ -->
-    <div class="lb-heading flex flex-col items-center justify-center gap-2 px-4 py-6" role="heading" aria-level="1">
-      <span
-        class="font-pixel lb-gameover-text text-theme-accent-2 text-glow-accent-2 glitch-text select-none"
-        aria-hidden="true"
-      >
-        GAME OVER
-      </span>
-      <!-- Screen-reader accessible heading -->
-      <span class="sr-only">Game Over — Results Screen</span>
-      <p class="font-terminal text-sm text-theme-muted tracking-wide">
-        "Draw the Word" complete!
-      </p>
-    </div>
+    <div class="lb-body flex flex-1 min-h-0">
 
-    <!-- Divider -->
-    <div class="lb-divider" aria-hidden="true"></div>
-
-    <!-- ══════════════════════════════════════════════════
-         SCORES LIST
-    ═══════════════════════════════════════════════════ -->
-    <section
-      class="lb-scores-list flex flex-col gap-2 px-4 py-4 overflow-y-auto flex-1 min-h-0"
-      aria-label="Player rankings"
-    >
-
-      <!-- Empty state -->
+      <!-- LEFT: Winner's drawing -->
       <div
-        v-if="scores.length === 0"
-        class="flex items-center justify-center h-full py-12"
-        aria-live="polite"
+        v-if="winnerCanvas"
+        class="lb-winner-panel flex flex-col"
+        aria-label="Winner's drawing"
       >
-        <span class="font-terminal text-sm text-theme-muted">No results yet.</span>
-      </div>
-
-      <!-- Rank rows -->
-      <div
-        v-for="(entry, index) in scores"
-        :key="entry.userId"
-        class="rank-row"
-        :class="[
-          rankClass(index + 1),
-          entry.userId === myUserId ? 'rank-row--you' : '',
-        ]"
-        role="listitem"
-        :aria-label="`Rank ${index + 1}: ${entry.userName}, score ${avgScoreMap.get(entry.userId)}`"
-      >
-
-        <!-- ── Rank medal ── -->
-        <span
-          class="rank-medal font-pixel text-sm select-none shrink-0"
-          :class="{
-            'text-theme-accent-2 text-glow-accent-2': index === 0,
-            'text-theme-accent':                      index === 1,
-            'text-theme-muted':                       index >= 2,
-          }"
-          aria-hidden="true"
-        >{{ rankMedal(index + 1) }}</span>
-
-        <!-- ── Player name + YOU badge ── -->
-        <div class="rank-name-group flex items-center gap-2 flex-1 min-w-0">
-          <span class="font-pixel text-sm text-theme truncate">{{ entry.userName }}</span>
-          <span v-if="entry.userId === myUserId" class="badge-you shrink-0" aria-label="This is you">
-            YOU
+        <!-- Panel header -->
+        <div class="lb-winner-header px-4 py-2 flex items-center gap-2 shrink-0">
+          <span class="font-pixel text-[10px] text-theme-accent-2 text-glow-accent-2 tracking-widest">
+            ◆ 1ST PLACE
+          </span>
+          <span v-if="scores[0]" class="font-terminal text-xs text-theme-muted truncate">
+            {{ scores[0].userName }}
           </span>
         </div>
+        <div class="lb-winner-divider" aria-hidden="true"></div>
+        <!-- Canvas image -->
+        <div class="flex-1 flex items-center justify-center p-4 min-h-0">
+          <img
+            :src="winnerCanvas"
+            alt="Winner's drawing"
+            class="lb-winner-img"
+          />
+        </div>
+      </div>
 
-        <!-- ── Score block ── -->
-        <div class="rank-score-group flex flex-col items-end shrink-0">
-          <!-- Average score — prominent -->
+      <!-- Vertical divider between panels -->
+      <div v-if="winnerCanvas" class="lb-col-divider" aria-hidden="true"></div>
+
+      <!-- RIGHT: Leaderboard panel -->
+      <div class="lb-scores-panel flex flex-col flex-1 min-w-0 min-h-0">
+
+        <!-- GAME OVER HEADING -->
+        <div class="lb-heading flex flex-col items-center justify-center gap-2 px-4 py-5" role="heading" aria-level="1">
           <span
-            class="font-pixel text-base rank-avg-score"
-            :class="{
-              'text-theme-accent-2 text-glow-accent-2': index === 0,
-              'text-theme-accent text-glow-accent':     index === 1,
-              'text-theme':                              index >= 2,
-            }"
+            class="font-pixel lb-gameover-text text-theme-accent-2 text-glow-accent-2 glitch-text select-none"
+            aria-hidden="true"
           >
-            &#9733; {{ avgScoreMap.get(entry.userId) }}
+            GAME OVER
           </span>
-          <!-- Total pts + vote count — muted detail -->
-          <span class="font-terminal text-xs text-theme-muted">
-            ({{ entry.totalScore }} pts, {{ entry.voteCount }}v)
-          </span>
+          <span class="sr-only">Game Over — Results Screen</span>
+          <p class="font-terminal text-sm text-theme-muted tracking-wide">
+            "Draw the Word" complete!
+          </p>
         </div>
 
+        <div class="lb-divider" aria-hidden="true"></div>
+
+        <!-- SCORES LIST -->
+        <section
+          class="lb-scores-list flex flex-col gap-2 px-4 py-4 overflow-y-auto flex-1 min-h-0"
+          aria-label="Player rankings"
+        >
+          <!-- Empty state -->
+          <div
+            v-if="scores.length === 0"
+            class="flex items-center justify-center h-full py-12"
+            aria-live="polite"
+          >
+            <span class="font-terminal text-sm text-theme-muted">No results yet.</span>
+          </div>
+
+          <!-- Rank rows -->
+          <div
+            v-for="(entry, index) in scores"
+            :key="entry.userId"
+            class="rank-row"
+            :class="[
+              rankClass(index + 1),
+              entry.userId === myUserId ? 'rank-row--you' : '',
+            ]"
+            role="listitem"
+            :aria-label="`Rank ${index + 1}: ${entry.userName}, score ${avgScoreMap.get(entry.userId)}`"
+          >
+            <!-- ── Rank medal ── -->
+            <span
+              class="rank-medal font-pixel text-sm select-none shrink-0"
+              :class="{
+                'text-theme-accent-2 text-glow-accent-2': index === 0,
+                'text-theme-accent':                      index === 1,
+                'text-theme-muted':                       index >= 2,
+              }"
+              aria-hidden="true"
+            >{{ rankMedal(index + 1) }}</span>
+
+            <!-- ── Player name + YOU badge ── -->
+            <div class="rank-name-group flex items-center gap-2 flex-1 min-w-0">
+              <span class="font-pixel text-sm text-theme truncate">{{ entry.userName }}</span>
+              <span v-if="entry.userId === myUserId" class="badge-you shrink-0" aria-label="This is you">
+                YOU
+              </span>
+            </div>
+
+            <!-- ── Score block ── -->
+            <div class="rank-score-group flex flex-col items-end shrink-0">
+              <span
+                class="font-pixel text-base rank-avg-score"
+                :class="{
+                  'text-theme-accent-2 text-glow-accent-2': index === 0,
+                  'text-theme-accent text-glow-accent':     index === 1,
+                  'text-theme':                              index >= 2,
+                }"
+              >
+                &#9733; {{ avgScoreMap.get(entry.userId) }}
+              </span>
+              <span class="font-terminal text-xs text-theme-muted">
+                ({{ entry.totalScore }} pts, {{ entry.voteCount }}v)
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <div class="lb-divider" aria-hidden="true"></div>
+
+        <!-- ACTION FOOTER -->
+        <footer
+          class="lb-footer bg-theme-surface flex items-center gap-3 px-4 py-3"
+          role="group"
+          aria-label="Session actions"
+        >
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="handleLeave"
+            aria-label="Leave the room and return to home"
+          >
+            Leave Room
+          </button>
+          <div class="flex-1" aria-hidden="true"></div>
+          <button
+            v-if="isOwner"
+            type="button"
+            class="btn btn-primary lb-play-again-btn"
+            @click="handlePlayAgain"
+            aria-label="Play again — restarts the room to the lobby"
+          >
+            &#9654; Play Again
+          </button>
+        </footer>
+
       </div>
-    </section>
-
-    <!-- Divider -->
-    <div class="lb-divider" aria-hidden="true"></div>
-
-    <!-- ══════════════════════════════════════════════════
-         ACTION FOOTER — sticky at bottom
-    ═══════════════════════════════════════════════════ -->
-    <footer
-      class="lb-footer bg-theme-surface flex items-center gap-3 px-4 py-3"
-      role="group"
-      aria-label="Session actions"
-    >
-      <!-- Leave Room — always visible -->
-      <button
-        type="button"
-        class="btn btn-secondary"
-        @click="handleLeave"
-        aria-label="Leave the room and return to home"
-      >
-        Leave Room
-      </button>
-
-      <!-- Spacer -->
-      <div class="flex-1" aria-hidden="true"></div>
-
-      <!-- Play Again — host only -->
-      <button
-        v-if="isOwner"
-        type="button"
-        class="btn btn-primary lb-play-again-btn"
-        @click="handlePlayAgain"
-        aria-label="Play again — restarts the room to the lobby"
-      >
-        &#9654; Play Again
-      </button>
-    </footer>
+    </div>
 
   </div>
 </template>
@@ -208,6 +230,50 @@ function handleLeave(): void {
 .lb-root {
   width: 100%;
   height: 100%;
+}
+
+/* ── Two-column body ── */
+.lb-body {
+  overflow: hidden;
+}
+
+/* ── Winner drawing panel (left) ── */
+.lb-winner-panel {
+  width: 45%;
+  min-width: 240px;
+  max-width: 480px;
+  flex-shrink: 0;
+  background-color: var(--color-surface);
+}
+
+.lb-winner-header {
+  background-color: var(--color-surface-2);
+  border-bottom: 2px solid var(--color-accent-2);
+}
+
+.lb-winner-divider {
+  height: 0;
+}
+
+.lb-winner-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  border: 2px solid var(--color-accent-2);
+  box-shadow: 0 0 16px rgba(0, 245, 212, 0.2);
+}
+
+/* ── Vertical divider between columns ── */
+.lb-col-divider {
+  width: 2px;
+  background-color: var(--color-border);
+  flex-shrink: 0;
+}
+
+/* ── Scores panel (right) ── */
+.lb-scores-panel {
+  overflow: hidden;
 }
 
 /* ── Titlebar ── */

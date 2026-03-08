@@ -551,7 +551,7 @@ function onTextKeydown(e: KeyboardEvent) {
     <!-- Draw the Word prompt banner — shown only when a word is set -->
     <div
       v-if="props.gameWord"
-      class="dtw-prompt-banner absolute top-3 left-1/2 z-20 pointer-events-none flex items-center gap-2 px-4 py-2"
+      class="dtw-prompt-banner absolute top-[80px] left-1/2 z-20 pointer-events-none flex items-center gap-2 px-4 py-2"
       :style="{ transform: 'translateX(-50%)' }"
     >
       <span class="font-terminal text-xs text-theme-muted">Draw:</span>
