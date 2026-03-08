@@ -4,7 +4,6 @@ import type { DrawElement, RoomSettings } from '../types'
 import { BoardModel } from '../models/Board'
 import { RateLimiter } from '../lib/rateLimiter'
 
-// Max 120 draw events per second per user
 const drawLimiter = new RateLimiter(120, 1000)
 
 const VALID_TYPES = new Set(['pen', 'rect', 'circle', 'arrow', 'line', 'text', 'select', 'eraser', 'fill'])

@@ -34,11 +34,9 @@ function isTypingTarget(e: KeyboardEvent): boolean {
 export function useKeyboardShortcuts(options: ShortcutOptions = {}) {
   const canvasStore = useCanvasStore()
 
-  // Exposed so WhiteboardCanvas can enable space-drag panning
   const isSpaceDown = ref(false)
 
   function onKeyDown(e: KeyboardEvent) {
-    // Space: activate pan mode (textarea/input already consumes space naturally)
     if (e.code === 'Space' && !isTypingTarget(e)) {
       isSpaceDown.value = true
       e.preventDefault()
@@ -68,7 +66,6 @@ export function useKeyboardShortcuts(options: ShortcutOptions = {}) {
       return
     }
 
-    // Tool keys
     if (e.key in TOOL_KEYS) {
       canvasStore.setActiveTool(TOOL_KEYS[e.key])
       return

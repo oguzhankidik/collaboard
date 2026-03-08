@@ -21,14 +21,12 @@ const emit = defineEmits<{
           @click="emit('close')"
         />
         <div class="modal-panel relative">
-          <!-- NES titlebar -->
           <div class="modal-titlebar">
             <span>■ {{ title }}</span>
             <button
               class="w-6 h-6 flex items-center justify-center hover:opacity-75"
               @click="emit('close')"
             >
-              <!-- Pixel X icon -->
               <svg width="12" height="12" viewBox="0 0 12 12">
                 <rect x="0" y="0" width="2" height="2" fill="white"/>
                 <rect x="2" y="2" width="2" height="2" fill="white"/>
@@ -42,7 +40,6 @@ const emit = defineEmits<{
               </svg>
             </button>
           </div>
-          <!-- Body -->
           <div class="modal-body">
             <slot />
           </div>

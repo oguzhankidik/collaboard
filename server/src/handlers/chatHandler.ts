@@ -6,7 +6,6 @@ import { RateLimiter } from '../lib/rateLimiter'
 const MAX_MESSAGE_LENGTH = 500
 const MAX_HISTORY = 50
 
-// Max 10 chat messages per minute per user
 const chatLimiter = new RateLimiter(10, 60_000)
 
 export function registerChatHandlers(

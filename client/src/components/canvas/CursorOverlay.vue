@@ -42,7 +42,6 @@ onUnmounted(() => {
         transition: 'transform 80ms linear',
       }"
     >
-      <!-- Cursor arrow -->
       <svg width="16" height="16" viewBox="0 0 16 16" class="-translate-y-px">
         <path
           d="M0 0 L0 12 L3.5 9 L6 14 L8 13 L5.5 8 L10 8 Z"
@@ -51,7 +50,6 @@ onUnmounted(() => {
           stroke-width="1"
         />
       </svg>
-      <!-- Name label -->
       <span
         class="text-xs text-white px-1 whitespace-nowrap mt-3"
         :style="{ backgroundColor: cursor.color }"

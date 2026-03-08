@@ -206,7 +206,6 @@ export function registerRoomHandlers(
       names.set(socket.userId, socket.userName)
       lobbyParticipants.set(roomId, names)
 
-      // Track owner in fast-lookup map
       roomOwners.set(roomId, room.ownerId)
 
       const status = roomStatuses.get(roomId) ?? (room.status ?? 'waiting')
@@ -222,7 +221,6 @@ export function registerRoomHandlers(
 
       socket.emit('chat:history', roomMessages.get(roomId) ?? [])
 
-      // In DTW mode during active game phases, don't send shared board state
       const settings = roomSettings.get(roomId) ?? DEFAULT_SETTINGS
       const isDtw = settings.gameMode === 'draw-the-word'
       const isActiveGame = status === 'started' || status === 'word-entry' || status === 'review' || status === 'results'
@@ -267,16 +265,13 @@ export function registerRoomHandlers(
       roomSettings.set(roomId, settings)
 
       if (settings.gameMode === 'draw-the-word') {
-        // Transition to word-entry phase — host must submit the word before game starts
         roomStatuses.set(roomId, 'word-entry')
         if (!useMemory()) {
           await RoomModel.updateOne({ id: roomId }, { status: 'word-entry' })
         }
-        // Notify host to show word-entry UI; others see "waiting for host"
         socket.emit('game:word-entry')
         socket.to(roomId).emit('room:status_changed', 'word-entry')
       } else {
-        // Collaborative mode — start immediately
         const startedAt = Date.now()
         roomSessionStartAt.set(roomId, startedAt)
         roomStatuses.set(roomId, 'started')
@@ -323,7 +318,6 @@ export function registerRoomHandlers(
 
       cancelRoomTimer(roomId, roomTimers)
 
-      // Cancel review/slideshow timers too
       const snapshotTimer = roomSnapshotTimers.get(roomId)
       if (snapshotTimer !== undefined) {
         clearTimeout(snapshotTimer)
@@ -335,7 +329,6 @@ export function registerRoomHandlers(
         roomSlideTimers.delete(roomId)
       }
 
-      // Clear game state
       roomGameWords.delete(roomId)
       roomSnapshots.delete(roomId)
       roomVotes.delete(roomId)

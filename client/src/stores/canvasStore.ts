@@ -14,7 +14,6 @@ export const useCanvasStore = defineStore('canvas', () => {
   const history = ref<DrawElement[][]>([])
   const redoStack = ref<DrawElement[][]>([])
 
-  // Viewport state
   const zoom = ref(1)
   const panX = ref(0)
   const panY = ref(0)

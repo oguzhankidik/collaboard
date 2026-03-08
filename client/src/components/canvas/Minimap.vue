@@ -11,9 +11,6 @@ const minimapRef = ref<HTMLCanvasElement | null>(null)
 let ctx: CanvasRenderingContext2D | null = null
 let frameId: number | null = null
 
-// ── Offscreen element cache ─────────────────────────────────────────────────
-// Elements are drawn once to an offscreen canvas; re-rendered only when elements
-// actually change (not on pan/zoom). Pan/zoom only redraws the cheap viewport rect.
 let elementCache: OffscreenCanvas | null = null
 let cacheScale = 1
 let cacheOffsetX = 0
@@ -37,7 +34,6 @@ function renderElementCache() {
     return
   }
 
-  // Compute bounds from elements only (viewport position intentionally excluded)
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const el of els) {
     const b = getElementBounds(el)
@@ -76,7 +72,6 @@ function renderElementCache() {
   c.restore()
 }
 
-// ── Draw: blit cache + viewport rect (O(1) during pan) ─────────────────────
 function draw() {
   if (!ctx) return
   const c = ctx
@@ -87,7 +82,6 @@ function draw() {
     c.drawImage(elementCache, 0, 0)
   }
 
-  // Viewport indicator — positioned using the same cached coordinate system
   const mw = props.mainCanvas?.width ?? window.innerWidth
   const mh = props.mainCanvas?.height ?? window.innerHeight
   const vw = mw / canvasStore.zoom
@@ -115,10 +109,8 @@ function scheduleFullRedraw() {
   scheduleDraw()
 }
 
-// Elements changed → re-render element cache
 watch(() => canvasStore.elements, scheduleFullRedraw, { deep: true })
 
-// Pan/zoom → only update viewport rect (cheap, no element loop)
 watch(() => [canvasStore.panX, canvasStore.panY, canvasStore.zoom] as const, scheduleDraw)
 
 onMounted(() => {

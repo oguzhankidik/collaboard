@@ -5,7 +5,6 @@ import { RateLimiter } from '../lib/rateLimiter'
 // Max 40 cursor events per second per user (client throttles to 30ms already)
 const cursorLimiter = new RateLimiter(40, 1000)
 
-// Cursor colour palette — deterministic per userId
 const CURSOR_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e',
   '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899',

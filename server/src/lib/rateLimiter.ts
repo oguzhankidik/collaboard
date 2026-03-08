@@ -18,7 +18,6 @@ export class RateLimiter {
     this.windowMs = windowMs
   }
 
-  /** Returns true if the event is allowed, false if rate limit exceeded. */
   allow(key: string): boolean {
     const now = Date.now()
     const bucket = this.buckets.get(key)
@@ -34,7 +33,6 @@ export class RateLimiter {
     return true
   }
 
-  /** Call on socket disconnect to free memory. */
   remove(key: string): void {
     this.buckets.delete(key)
   }

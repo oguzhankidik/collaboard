@@ -45,12 +45,10 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="window-panel flex flex-col">
-    <!-- Titlebar -->
     <div class="window-titlebar px-2 h-7">
       <span>■ CHAT</span>
     </div>
 
-    <!-- Message list -->
     <div ref="messageListRef" class="message-list overflow-y-auto flex flex-col gap-2 p-2">
       <div
         v-for="(msg, i) in roomStore.chatMessages"
@@ -69,7 +67,6 @@ function onKeydown(e: KeyboardEvent) {
       </div>
     </div>
 
-    <!-- Input row -->
     <div class="flex gap-1 px-2 pb-2 shrink-0">
       <input
         v-model="inputText"

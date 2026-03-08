@@ -7,7 +7,6 @@ export interface AuthRequest extends Request {
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (!hasCredentials) {
-    // Dev mode: allow requests without auth
     ;(req as AuthRequest).uid = 'dev-user'
     next()
     return

@@ -20,7 +20,6 @@ const canCreateRoom = computed(() => !isGuest.value && !isInRoom.value)
 
 <template>
   <div class="min-h-screen bg-theme-bg">
-    <!-- Header -->
     <header class="px-6 py-3 flex items-center justify-between header-accent-border bg-theme-surface">
       <div class="font-pixel text-md glitch-text text-theme-accent">
         <span class="text-glow-accent">COLLA</span><span class="text-glow-accent-2 text-theme-accent-2">BOARD</span>
@@ -37,7 +36,6 @@ const canCreateRoom = computed(() => !isGuest.value && !isInRoom.value)
       </div>
     </header>
 
-    <!-- Main -->
     <main class="max-w-3xl mx-auto px-6 py-10">
       <div class="flex items-center justify-between mb-6">
         <h2 class="font-pixel text-theme">Rooms</h2>

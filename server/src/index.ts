@@ -22,8 +22,6 @@ const CLIENT_URL = (process.env.CLIENT_URL ?? 'http://localhost:5173').replace(/
 const ALLOWED_ORIGINS = IS_DEV ? [CLIENT_URL, 'http://localhost:5173'] : [CLIENT_URL]
 const MONGODB_URI = process.env.MONGODB_URI ?? ''
 
-// ── In-memory room state ────────────────────────────────────────────────────
-
 const memoryRooms: Room[] = []
 const lobbyParticipants = new Map<string, Map<string, string>>()
 const roomStatuses = new Map<string, RoomStatus>()
@@ -33,24 +31,14 @@ const roomTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const roomSessionStartAt = new Map<string, number>()
 const roomDeletionTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
-// ── Game mode state ─────────────────────────────────────────────────────────
-
-// Fast owner lookup (roomId → ownerId); populated on room:join
 const roomOwners = new Map<string, string>()
-// Word entered by host for Draw-the-Word games
 const roomGameWords = new Map<string, string>()
-// Canvas PNG snapshots collected at end of DTW game (roomId → userId → dataURL)
 const roomSnapshots = new Map<string, Map<string, string>>()
-// Timeout waiting for all players to submit snapshots
 const roomSnapshotTimers = new Map<string, ReturnType<typeof setTimeout>>()
-// Votes during review phase (roomId → voterUserId → targetUserId → score 1–5)
 const roomVotes = new Map<string, Map<string, Map<string, number>>>()
-// setTimeout handles for the 5-second slide intervals
 const roomSlideTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const useMemory = () => !MONGODB_URI
-
-// ── Express app ─────────────────────────────────────────────────────────────
 
 const app = express()
 app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }))
@@ -60,7 +48,6 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// REST: list rooms
 app.get('/rooms', async (_req, res) => {
   const liveCount = (roomId: string) => lobbyParticipants.get(roomId)?.size ?? 0
 
@@ -80,7 +67,6 @@ app.get('/rooms', async (_req, res) => {
   }
 })
 
-// REST: create room (requires Firebase auth)
 app.post('/rooms', requireAuth, async (req, res) => {
   const ownerId = (req as AuthRequest).uid
   const { name, isPrivate = false } = req.body as { name?: string; isPrivate?: boolean }
@@ -115,8 +101,6 @@ app.post('/rooms', requireAuth, async (req, res) => {
   }
 })
 
-// ── Socket.io ────────────────────────────────────────────────────────────────
-
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
   cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] },
@@ -149,8 +133,6 @@ io.on('connection', (socket) => {
     console.log(`[socket] disconnected: ${authSocket.userId}`)
   })
 })
-
-// ── MongoDB + start ──────────────────────────────────────────────────────────
 
 async function start() {
   if (!MONGODB_URI) {

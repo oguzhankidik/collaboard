@@ -48,7 +48,6 @@ onMounted(async () => {
     return
   }
 
-  // room:lobby fires on initial join AND after socket reconnects (re-join)
   socket.value.on('room:lobby', (state: LobbyState) => {
     roomStore.setLobbyState(state.ownerId, state.status, state.participants, state.settings, state.sessionStartedAt)
     roomStore.setCurrentRoomId(roomId)
@@ -68,7 +67,6 @@ onMounted(async () => {
     phase.value = 'canvas'
   })
 
-  // Server broadcasts status changes (e.g. word-entry) to non-host players
   socket.value.on('room:status_changed', (status: RoomStatus) => {
     roomStore.setRoomStatus(status)
   })
@@ -123,19 +121,16 @@ onMounted(async () => {
     canvasStore.clearHistory()
   })
 
-  // Draw the Word: host receives this after room:start to enter the word
   socket.value.on('game:word-entry', () => {
     showWordEntryModal.value = true
   })
 
-  // Draw the Word: word confirmed — broadcast to all players so canvas can show prompt
   socket.value.on('game:word-prompt', (word: string) => {
     gameWord.value = word
     showWordEntryModal.value = false
     drawingSubmitted.value = false
   })
 
-  // Draw the Word: timer expired — capture canvas PNG and submit to server
   socket.value.on('game:review-start', (_players: Participant[]) => {
     roomStore.setRoomStatus('review')
     const canvasData = whiteboardCanvasRef.value?.captureSnapshot() ?? ''
@@ -145,7 +140,6 @@ onMounted(async () => {
     drawingSubmitted.value = true
   })
 
-  // Draw the Word: server sends each player's drawing for review
   socket.value.on('game:slide', (data: GameSlide) => {
     slideSnapshots.set(data.userId, data.canvasData)
     currentSlide.value = data
@@ -153,7 +147,6 @@ onMounted(async () => {
     phase.value = 'review'
   })
 
-  // Draw the Word: all slides shown — show leaderboard (Phase 5)
   socket.value.on('game:results', (scores: PlayerScore[]) => {
     gameResults.value = scores
     winnerCanvas.value = scores[0] ? (slideSnapshots.get(scores[0].userId) ?? '') : ''
@@ -161,13 +154,11 @@ onMounted(async () => {
     phase.value = 'results'
   })
 
-  // Server-side errors (e.g. room not found, room full)
   socket.value.on('error', (err: { message: string }) => {
     console.warn('[room] server error:', err.message)
     router.push({ name: 'home' })
   })
 
-  // Re-join room after socket.io automatic reconnect (not on initial connect)
   let joined = false
   socket.value.on('connect', () => {
     if (joined) socket.value?.emit('room:join', roomId)
@@ -215,12 +206,10 @@ function confirmClose() {
 
 <template>
   <div class="flex flex-col h-screen overflow-hidden bg-theme-bg">
-    <!-- Header — visible in every phase -->
     <header class="flex items-center justify-between px-4 py-2 z-20 shrink-0 header-accent-border bg-theme-surface">
       <div class="flex items-center gap-2 md:gap-3">
         <AppButton variant="secondary" @click="leaveRoom">← Leave Room</AppButton>
       </div>
-      <!-- Session timer — centered in header -->
       <SessionTimer v-if="phase === 'canvas'" />
       <div class="flex items-center gap-2 md:gap-3">
         <span v-if="!connected" class="text-xs px-2 py-1 badge-disconnected">Disconnected</span>
@@ -238,21 +227,17 @@ function confirmClose() {
       </div>
     </header>
 
-    <!-- Connecting splash -->
     <div v-if="phase === 'connecting'" class="flex-1 flex items-center justify-center">
       <span class="font-pixel text-[8px] text-theme-muted">Connecting…</span>
     </div>
 
-    <!-- Error splash -->
     <div v-else-if="phase === 'error'" class="flex-1 flex flex-col items-center justify-center gap-4">
       <span class="font-pixel text-[8px] text-theme-danger">Could not connect to room.</span>
       <AppButton variant="secondary" @click="router.push({ name: 'home' })">← Back to Home</AppButton>
     </div>
 
-    <!-- Lobby -->
     <RoomLobby v-else-if="phase === 'lobby'" :room-id="roomId" :socket="socket" />
 
-    <!-- Review: post-game drawing slideshow with voting -->
     <div v-else-if="phase === 'review' && currentSlide" class="flex-1 overflow-hidden">
       <GameReview
         :slide="currentSlide"
@@ -262,7 +247,6 @@ function confirmClose() {
       />
     </div>
 
-    <!-- Results: leaderboard -->
     <div v-else-if="phase === 'results'" class="flex-1 overflow-hidden">
       <GameLeaderboard
         :scores="gameResults"
@@ -275,7 +259,6 @@ function confirmClose() {
       />
     </div>
 
-    <!-- Canvas -->
     <div v-else class="flex-1 relative overflow-hidden">
       <WhiteboardCanvas
         ref="whiteboardCanvasRef"
@@ -283,7 +266,6 @@ function confirmClose() {
         :game-word="gameWord || undefined"
       />
 
-      <!-- DTW: drawing submitted overlay (shown after timer expires) -->
       <Transition
         enter-active-class="transition-opacity duration-200"
         enter-from-class="opacity-0"
@@ -301,7 +283,6 @@ function confirmClose() {
       </Transition>
     </div>
 
-    <!-- Word entry modal — shown to host after starting Draw the Word -->
     <WordEntryModal
       :open="showWordEntryModal"
       :room-id="roomId"
@@ -309,7 +290,6 @@ function confirmClose() {
       @cancel="showWordEntryModal = false"
     />
 
-    <!-- Close room confirmation modal -->
     <AppModal title="CLOSE ROOM" :open="showCloseModal" @close="showCloseModal = false">
       <div class="flex flex-col gap-5">
         <p class="text-theme font-terminal text-sm leading-relaxed">
@@ -325,7 +305,6 @@ function confirmClose() {
       </div>
     </AppModal>
 
-    <!-- Stop confirmation modal -->
     <AppModal title="STOP GAME" :open="showStopModal" @close="showStopModal = false">
       <div class="flex flex-col gap-5">
         <p class="text-theme font-terminal text-sm leading-relaxed">

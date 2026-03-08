@@ -1,7 +1,3 @@
-/* ============================================================
-   Collaboard Design Tokens
-   ============================================================ */
-
 :root {
   --color-bg: #0f0f1a;
   --color-surface: #1a1a2e;
@@ -21,10 +17,6 @@
   --font-pixel: 'Pixelify Sans', monospace;
   --font-terminal: 'Pixelify Sans', monospace;
 }
-
-/* ============================================================
-   Global base overrides
-   ============================================================ */
 
 body {
   background-color: var(--color-bg);
@@ -62,10 +54,6 @@ body.in-board .header-accent-border::before {
   animation: scanline-drift 8s linear infinite;
 }
 
-/* ============================================================
-   Keyframes
-   ============================================================ */
-
 @keyframes scanline-drift {
   from {
     background-position: 0 0;
@@ -76,7 +64,6 @@ body.in-board .header-accent-border::before {
   }
 }
 
-/* Periodic glitch — short band tear every 6 seconds */
 @keyframes glitch {
 
   0%,
@@ -106,7 +93,6 @@ body.in-board .header-accent-border::before {
   }
 }
 
-/* Toolbar active tool pulse */
 @keyframes glow-pulse {
 
   0%,
@@ -119,13 +105,8 @@ body.in-board .header-accent-border::before {
   }
 }
 
-/* ============================================================
-   Reusable component classes
-   ============================================================ */
-
 @layer components {
 
-  /* ── Buttons ── */
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium cursor-pointer focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed;
     font-family: var(--font-terminal);
@@ -173,7 +154,6 @@ body.in-board .header-accent-border::before {
     transform: translate(1px, 1px);
   }
 
-  /* Square icon-only button */
   .btn-icon {
     @apply w-9 h-9 flex items-center justify-center cursor-pointer focus:outline-none disabled:opacity-30 disabled:cursor-not-allowed;
     color: var(--color-text-muted);
@@ -192,7 +172,6 @@ body.in-board .header-accent-border::before {
     animation: glow-pulse 2s ease-in-out infinite;
   }
 
-  /* ── Cards ── */
   .card {
     background-color: var(--color-surface);
     border: 2px solid var(--color-border);
@@ -214,12 +193,10 @@ body.in-board .header-accent-border::before {
     transform: translate(-2px, -2px);
   }
 
-  /* ── Neon accent card glow ── */
   .neon-accent {
     box-shadow: var(--glow-accent);
   }
 
-  /* ── Modal ── */
   .modal-panel {
     background-color: var(--color-surface);
     border: 2px solid var(--color-accent);
@@ -244,7 +221,6 @@ body.in-board .header-accent-border::before {
     padding: 24px;
   }
 
-  /* ── Form ── */
   .input-field {
     background-color: var(--color-surface-2);
     border: 2px solid var(--color-border);
@@ -272,7 +248,6 @@ body.in-board .header-accent-border::before {
     -webkit-box-shadow: 0 0 0px 1000px var(--color-surface-2) inset;
   }
 
-  /* ── Misc ── */
   .divider {
     border: none;
     border-top: 1px solid var(--color-border);
@@ -287,13 +262,11 @@ body.in-board .header-accent-border::before {
     border: 2px solid var(--color-border);
   }
 
-  /* ── Glitch text ── */
   .glitch-text {
     animation: glitch 6s steps(1) infinite;
     position: relative;
   }
 
-  /* ── Text glow ── */
   .text-glow-accent {
     text-shadow: 0 0 8px rgba(108, 99, 255, 0.8), 0 0 20px rgba(108, 99, 255, 0.4);
   }
@@ -302,7 +275,6 @@ body.in-board .header-accent-border::before {
     text-shadow: 0 0 8px rgba(0, 245, 212, 0.8), 0 0 20px rgba(0, 245, 212, 0.4);
   }
 
-  /* ── Toolbar panel ── */
   .toolbar-panel {
     background-color: var(--color-surface);
     border: 2px solid var(--color-accent);
@@ -321,7 +293,6 @@ body.in-board .header-accent-border::before {
     animation: scanline-drift 8s linear infinite;
   }
 
-  /* ── Gradient accent border (header) ── */
   .header-accent-border {
     position: relative;
   }
@@ -338,13 +309,11 @@ body.in-board .header-accent-border::before {
         var(--color-accent-2) 70%, transparent 100%);
   }
 
-  /* ── Avatar pixel ── */
   .avatar-pixel {
     border: 2px solid var(--color-accent);
     box-shadow: 2px 2px 0 var(--color-accent), var(--glow-accent);
   }
 
-  /* ── Design token color utilities ── */
   .bg-theme-bg {
     background-color: var(--color-bg);
   }
@@ -393,7 +362,6 @@ body.in-board .header-accent-border::before {
     border-color: var(--color-accent);
   }
 
-  /* ── Font utilities ── */
   .font-terminal {
     font-family: var(--font-terminal);
   }
@@ -403,7 +371,7 @@ body.in-board .header-accent-border::before {
     letter-spacing: 0.05em;
   }
 
-  /* ── Label override (resets global pixel-font label rule) ── */
+  /* resets the global pixel-font label rule for specific elements */
   .label-reset {
     font-family: inherit;
     font-size: inherit;
@@ -411,7 +379,6 @@ body.in-board .header-accent-border::before {
     letter-spacing: normal;
   }
 
-  /* ── Alert / status badges ── */
   .alert-danger {
     color: var(--color-danger);
     background-color: rgba(255, 77, 109, 0.1);
@@ -424,7 +391,6 @@ body.in-board .header-accent-border::before {
     border: 2px solid rgba(255, 77, 109, 0.3);
   }
 
-  /* ── Participant role badges ── */
   .badge-host {
     font-family: var(--font-pixel);
     font-size: 12px;
@@ -446,7 +412,6 @@ body.in-board .header-accent-border::before {
     white-space: nowrap;
   }
 
-  /* ── Window panel (accent-bordered card used in lobby + participant panel) ── */
   .window-panel {
     position: relative;
     background-color: var(--color-surface);
@@ -478,7 +443,6 @@ body.in-board .header-accent-border::before {
     flex-shrink: 0;
   }
 
-  /* ── Toolbar vertical separator ── */
   .toolbar-divider {
     width: 1px;
     height: 1.5rem;
@@ -488,20 +452,12 @@ body.in-board .header-accent-border::before {
   }
 }
 
-/* ============================================================
-   Global label style — uppercase pixel font
-   ============================================================ */
-
 label {
   font-family: var(--font-pixel);
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-
-/* ============================================================
-   Custom scrollbar + selection
-   ============================================================ */
 
 ::selection {
   background-color: rgba(108, 99, 255, 0.4);

@@ -4,7 +4,6 @@ import type { DrawElement, Point } from '@/types'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { BOARD_SIZE } from '@/constants'
 
-// --- Bounds cache (module-level, persists across re-renders) ---
 const boundsCache = new Map<string, { x: number; y: number; w: number; h: number }>()
 
 function computeBounds(element: DrawElement): { x: number; y: number; w: number; h: number } {
@@ -106,7 +105,6 @@ export function useCanvas(
     c.restore()
   }
 
-  // Draw committed elements onto the static canvas (with viewport culling)
   function redrawStatic(elements: DrawElement[], selectedId?: string | null) {
     const canvas = staticCanvasRef.value
     if (!canvas) return
@@ -127,7 +125,6 @@ export function useCanvas(
     c.restore()
   }
 
-  // Draw in-progress elements onto the active canvas (no culling — always visible)
   function redrawActive(
     currentEl: DrawElement | null,
     remoteInProgress?: Map<string, DrawElement>,
@@ -147,7 +144,6 @@ export function useCanvas(
     c.restore()
   }
 
-  // Full render on the active canvas — used for eraser mode (static canvas is hidden)
   function redrawActiveAll(
     elements: DrawElement[],
     currentEl: DrawElement | null,
@@ -197,8 +193,6 @@ export function useCanvas(
     window.removeEventListener('resize', resize)
   })
 
-  // Composite both canvas layers onto a temp canvas and return a PNG data URL.
-  // The static canvas holds all committed elements; active canvas is clear at review time.
   function captureSnapshot(): string {
     const sc = staticCanvasRef.value
     if (!sc) return ''
@@ -215,8 +209,6 @@ export function useCanvas(
 
   return { canvasPoint, resize, redrawStatic, redrawActive, redrawActiveAll, captureSnapshot }
 }
-
-// --- Drawing helpers ---
 
 export function drawElement(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, element: DrawElement) {
   c.save()

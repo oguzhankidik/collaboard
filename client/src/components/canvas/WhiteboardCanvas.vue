@@ -29,7 +29,6 @@ const props = defineProps<{
 const route = useRoute()
 const roomId = route.params.roomId as string
 
-// Two canvas layers: static (committed elements) + active (in-progress drawing)
 const staticCanvasRef = ref<HTMLCanvasElement | null>(null)
 const activeCanvasRef = ref<HTMLCanvasElement | null>(null)
 
@@ -43,23 +42,19 @@ const { redrawStatic, redrawActive, redrawActiveAll, canvasPoint, captureSnapsho
 
 defineExpose({ captureSnapshot })
 
-// In-progress remote strokes (not yet committed) — plain Map, no reactivity needed
 const remoteInProgress = new Map<string, DrawElement>()
 
-// Drawing state
 const isDrawing = ref(false)
 const currentElement = ref<DrawElement | null>(null)
 let lastCursorEmit = 0
 let lastDrawEmit = 0
 
-// Select & move state
 const selectedElementId = ref<string | null>(null)
 const isDragging = ref(false)
 const isHoveringElement = ref(false)
 let dragStart: Point | null = null
 let dragOriginPoints: Point[] = []
 let hasMovedDuringDrag = false
-// Drag preview: local copy of the element being moved (not committed to store until pointer up)
 let dragPreview: DrawElement | null = null
 let dragExcludeId: string | null = null
 
@@ -68,29 +63,23 @@ const textInput = ref<{ x: number; y: number; worldPoint: { x: number; y: number
 const textInputRef = ref<HTMLTextAreaElement | null>(null)
 const textInputValue = ref('')
 
-// Pan state
 const isPanning = ref(false)
 const panStartScreen = ref<Point>({ x: 0, y: 0 })
 const panStartOffset = ref<Point>({ x: 0, y: 0 })
-// Last pan delta — used to commit final position on pointer up
 let panLastDx = 0
 let panLastDy = 0
 
-// Whether eraser is actively being drawn (active canvas shows full render, static hidden)
 const isEraserDrawing = ref(false)
 
-// Mobile drawer state
 const showMobileParticipants = ref(false)
 const showMobileChat = ref(false)
 
-// Pinch-to-zoom state (plain let — not reactive)
 const activePinchPointers = new Map<number, PointerEvent>()
 let pinchStartDistance = 0
 let pinchStartZoom = 0
 let pinchStartMidWorld: Point = { x: 0, y: 0 }
 let pinchStartMidScreen: Point = { x: 0, y: 0 }
 
-// --- Keyboard shortcuts ---
 const { isSpaceDown } = useKeyboardShortcuts({
   onDeleteSelected() {
     if (!selectedElementId.value) return
@@ -126,7 +115,6 @@ const { isSpaceDown } = useKeyboardShortcuts({
   },
 })
 
-// --- RAF handles ---
 let staticFrameId: number | null = null
 let activeFrameId: number | null = null
 
@@ -134,7 +122,6 @@ function scheduleStaticRender() {
   if (staticFrameId !== null) return
   staticFrameId = requestAnimationFrame(() => {
     staticFrameId = null
-    // During drag: exclude the moving element from the static canvas
     const elements = dragExcludeId
       ? canvasStore.elements.filter((e) => e.id !== dragExcludeId)
       : canvasStore.elements
@@ -146,12 +133,10 @@ function scheduleActiveRender() {
   if (activeFrameId !== null) return
   activeFrameId = requestAnimationFrame(() => {
     activeFrameId = null
-    // During drag: show the preview element on the active canvas (O(1), no store update)
     redrawActive(dragPreview ?? currentElement.value, remoteInProgress)
   })
 }
 
-// Eraser mode: hide static canvas, do full render on active canvas
 function scheduleEraserRender() {
   if (activeFrameId !== null) return
   activeFrameId = requestAnimationFrame(() => {
@@ -160,22 +145,18 @@ function scheduleEraserRender() {
   })
 }
 
-// --- Socket setup ---
 onMounted(() => {
-  // Resize both canvases after mount then do initial static render
   window.addEventListener('resize', () => {
     scheduleStaticRender()
     scheduleActiveRender()
   })
 
   props.socket?.on('draw:remote', (element: DrawElement) => {
-    // In-progress remote stroke — show on active canvas only
     remoteInProgress.set(element.userId, element)
     scheduleActiveRender()
   })
 
   props.socket?.on('draw:committed', (element: DrawElement) => {
-    // Remote stroke finished — move to committed store and redraw static
     remoteInProgress.delete(element.userId)
     canvasStore.updateElement(element)
     cacheElementBounds(element)
@@ -206,7 +187,6 @@ onMounted(() => {
   })
 })
 
-// Undo/redo and room:state (setElements) change the array reference → redraw static
 watch(
   () => canvasStore.elements,
   (newElements) => {
@@ -236,7 +216,6 @@ watch(
   },
 )
 
-// --- Wheel zoom ---
 function onWheel(e: WheelEvent) {
   const rect = activeCanvasRef.value!.getBoundingClientRect()
   const mx = e.clientX - rect.left
@@ -253,7 +232,6 @@ function onWheel(e: WheelEvent) {
   scheduleStaticRender()
 }
 
-// --- Drawing events ---
 function onPointerDown(e: PointerEvent) {
   activePinchPointers.set(e.pointerId, e)
   if (activePinchPointers.size === 2) {
@@ -291,7 +269,6 @@ function onPointerDown(e: PointerEvent) {
       dragOriginPoints = hit.points.map((p) => ({ ...p }))
       hasMovedDuringDrag = false
       invalidateBounds(hit.id)
-      // Exclude from static canvas, show on active canvas as preview
       dragExcludeId = hit.id
       dragPreview = { ...hit, points: hit.points.map((p) => ({ ...p })) }
     }
@@ -362,7 +339,6 @@ function onPointerMove(e: PointerEvent) {
   const now = Date.now()
   const point = canvasPoint(e)
 
-  // Cursor broadcast — always throttled (world-space position)
   if (now - lastCursorEmit >= CURSOR_THROTTLE_MS) {
     lastCursorEmit = now
     props.socket?.emit('cursor:move', point)
@@ -371,7 +347,6 @@ function onPointerMove(e: PointerEvent) {
   if (isPanning.value) {
     panLastDx = e.clientX - panStartScreen.value.x
     panLastDy = e.clientY - panStartScreen.value.y
-    // CSS transform: GPU-accelerated, zero canvas redraw during pan
     const t = `translate(${panLastDx}px, ${panLastDy}px)`
     if (staticCanvasRef.value) staticCanvasRef.value.style.transform = t
     if (activeCanvasRef.value) activeCanvasRef.value.style.transform = t
@@ -408,15 +383,12 @@ function onPointerMove(e: PointerEvent) {
     el.points = [el.points[0], point]
   }
 
-  // Eraser: full render on active canvas (static is hidden via CSS)
-  // Normal tools: only update active canvas (O(1) regardless of element count)
   if (isEraserDrawing.value) {
     scheduleEraserRender()
   } else {
     scheduleActiveRender()
   }
 
-  // Draw update — throttled to 16ms
   if (now - lastDrawEmit >= 16) {
     lastDrawEmit = now
     props.socket?.emit('draw:update', { ...el, points: [...el.points] })
@@ -426,9 +398,6 @@ function onPointerMove(e: PointerEvent) {
 function onPointerUp(e?: PointerEvent) {
   if (e) activePinchPointers.delete(e.pointerId)
 
-  // Guard: if nothing is active, don't cancel pending renders.
-  // On mobile, pointerleave fires right after pointerup (finger lifted),
-  // causing a second call that would cancel the RAF scheduled by the first call.
   if (!isDrawing.value && !isPanning.value && !isDragging.value) return
 
   if (staticFrameId !== null) {
@@ -442,7 +411,6 @@ function onPointerUp(e?: PointerEvent) {
 
   if (isPanning.value) {
     isPanning.value = false
-    // Remove CSS transform and commit final pan position to store in one shot
     if (staticCanvasRef.value) staticCanvasRef.value.style.transform = ''
     if (activeCanvasRef.value) activeCanvasRef.value.style.transform = ''
     canvasStore.setPan(
@@ -457,7 +425,6 @@ function onPointerUp(e?: PointerEvent) {
 
   if (canvasStore.activeTool === 'select') {
     if (isDragging.value && selectedElementId.value && hasMovedDuringDrag && dragPreview) {
-      // Commit the final dragged position to store in one shot
       dragExcludeId = null
       canvasStore.updateElement(dragPreview)
       cacheElementBounds(dragPreview)
@@ -481,7 +448,6 @@ function onPointerUp(e?: PointerEvent) {
   isDrawing.value = false
   currentElement.value = null
 
-  // Restore eraser mode — show static canvas again
   if (isEraserDrawing.value) {
     isEraserDrawing.value = false
   }
@@ -502,7 +468,6 @@ function handleText(e: PointerEvent) {
   textInputValue.value = ''
   textInput.value = { x: screenX, y: screenY, worldPoint }
 
-  // Focus the textarea on next tick after it mounts
   setTimeout(() => textInputRef.value?.focus(), 0)
 }
 
@@ -548,7 +513,6 @@ function onTextKeydown(e: KeyboardEvent) {
   <div class="relative w-full h-full overflow-hidden bg-theme-bg">
     <ToolBar @clear-board="roomStore.roomSettings.gameMode !== 'draw-the-word' && props.socket?.emit('board:clear', roomId)" />
 
-    <!-- Draw the Word prompt banner — shown only when a word is set -->
     <div
       v-if="props.gameWord"
       class="dtw-prompt-banner absolute top-[80px] left-1/2 z-20 pointer-events-none flex items-center gap-2 px-4 py-2"
@@ -558,14 +522,12 @@ function onTextKeydown(e: KeyboardEvent) {
       <span class="font-pixel text-[14px] text-theme-accent-2 text-glow-accent-2">"{{ props.gameWord }}"</span>
     </div>
 
-    <!-- Static canvas: committed elements. Hidden during eraser drawing. -->
     <canvas
       ref="staticCanvasRef"
       class="whiteboard-canvas-layer absolute inset-0 w-full h-full pointer-events-none"
       :class="{ invisible: isEraserDrawing }"
     />
 
-    <!-- Active canvas: in-progress drawing + remote strokes. Receives pointer events. -->
     <canvas
       ref="activeCanvasRef"
       class="whiteboard-canvas-layer absolute inset-0 w-full h-full"
@@ -592,7 +554,6 @@ function onTextKeydown(e: KeyboardEvent) {
       @wheel.prevent="onWheel"
     />
 
-    <!-- Inline text input -->
     <textarea
       v-if="textInput"
       ref="textInputRef"
@@ -614,13 +575,11 @@ function onTextKeydown(e: KeyboardEvent) {
 
     <CursorOverlay :socket="props.socket" />
 
-    <!-- Desktop panels -->
     <div class="hidden md:flex absolute top-3 right-3 z-30 flex-col gap-2 items-end">
       <ParticipantPanel />
       <ChatPanel :socket="props.socket" :room-id="roomId" class="w-[180px]" />
     </div>
 
-    <!-- Mobile FAB toggles -->
     <div class="flex md:hidden absolute bottom-16 right-3 z-30 flex-col gap-2">
       <button class="panel-fab" @click="showMobileParticipants = !showMobileParticipants">
         ■ {{ roomStore.lobbyParticipants.length }}
@@ -630,14 +589,12 @@ function onTextKeydown(e: KeyboardEvent) {
       </button>
     </div>
 
-    <!-- Mobile drawer backdrop -->
     <div
       v-if="showMobileParticipants || showMobileChat"
       class="md:hidden absolute inset-0 z-30 bg-black/50"
       @pointerdown.stop="showMobileParticipants = false; showMobileChat = false"
     />
 
-    <!-- Mobile participants drawer -->
     <Transition
       enter-active-class="transition-transform duration-200 ease-out"
       enter-from-class="translate-x-full"
@@ -651,7 +608,6 @@ function onTextKeydown(e: KeyboardEvent) {
       </div>
     </Transition>
 
-    <!-- Mobile chat drawer -->
     <Transition
       enter-active-class="transition-transform duration-200 ease-out"
       enter-from-class="translate-x-full"

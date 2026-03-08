@@ -14,7 +14,6 @@ function loginAsGuest() {
 <template>
   <div class="login-bg min-h-screen flex items-center justify-center">
     <div class="card neon-accent w-full max-w-sm px-8 py-10 text-center">
-      <!-- Pixel logo -->
       <div class="font-pixel text-base mb-6 leading-loose glitch-text text-theme-accent">
         <span class="text-glow-accent">COLLA</span><span class="text-glow-accent-2 text-theme-accent-2">BOARD</span>
       </div>
