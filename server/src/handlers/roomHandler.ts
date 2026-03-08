@@ -2,44 +2,15 @@ import type { Server } from 'socket.io'
 import type { AuthenticatedSocket } from '../middleware/authMiddleware'
 import { RoomModel } from '../models/Room'
 import { BoardModel } from '../models/Board'
-import type { Room, RoomStatus, ChatMessage, RoomSettings } from '../types'
+import type { Room, RoomStatus, ChatMessage, RoomSettings, GameMode } from '../types'
+import { cancelRoomTimer, startRoomTimer } from '../lib/timerUtils'
+import { triggerReview } from './gameHandler'
 
 const MAX_PARTICIPANTS = 20
 const VALID_TIMER_DURATIONS_MS = new Set([0, 300_000, 600_000, 900_000, 1_800_000, 3_600_000])
+const VALID_GAME_MODES = new Set<GameMode>(['collaborative', 'draw-the-word'])
 const ROOM_DELETION_GRACE_MS = 15_000
-
-function cancelRoomTimer(roomId: string, roomTimers: Map<string, ReturnType<typeof setTimeout>>): void {
-  const h = roomTimers.get(roomId)
-  if (h !== undefined) {
-    clearTimeout(h)
-    roomTimers.delete(roomId)
-  }
-}
-
-function startRoomTimer(
-  io: Server,
-  roomId: string,
-  durationMs: number,
-  roomStatuses: Map<string, RoomStatus>,
-  roomTimers: Map<string, ReturnType<typeof setTimeout>>,
-  useMemory: () => boolean,
-): void {
-  cancelRoomTimer(roomId, roomTimers)
-  const handle = setTimeout(async () => {
-    roomTimers.delete(roomId)
-    roomStatuses.set(roomId, 'waiting')
-    if (!useMemory()) {
-      try {
-        await RoomModel.updateOne({ id: roomId }, { status: 'waiting' })
-        await BoardModel.updateOne({ roomId }, { $set: { elements: [] } })
-      } catch {
-        // Ignore DB errors on timer expiry
-      }
-    }
-    io.to(roomId).emit('room:time_up')
-  }, durationMs)
-  roomTimers.set(roomId, handle)
-}
+const DEFAULT_SETTINGS: RoomSettings = { timerDurationMs: 0, gameMode: 'collaborative' }
 
 async function deleteRoom(
   roomId: string,
@@ -51,6 +22,12 @@ async function deleteRoom(
   roomTimers: Map<string, ReturnType<typeof setTimeout>>,
   roomSessionStartAt: Map<string, number>,
   roomDeletionTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomOwners: Map<string, string>,
+  roomGameWords: Map<string, string>,
+  roomSnapshots: Map<string, Map<string, string>>,
+  roomSnapshotTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomVotes: Map<string, Map<string, Map<string, number>>>,
+  roomSlideTimers: Map<string, ReturnType<typeof setTimeout>>,
   useMemory: () => boolean,
 ): Promise<void> {
   cancelRoomTimer(roomId, roomTimers)
@@ -60,6 +37,21 @@ async function deleteRoom(
   roomMessages.delete(roomId)
   roomSettings.delete(roomId)
   roomSessionStartAt.delete(roomId)
+  roomOwners.delete(roomId)
+  roomGameWords.delete(roomId)
+  roomSnapshots.delete(roomId)
+  roomVotes.delete(roomId)
+
+  const snapshotTimer = roomSnapshotTimers.get(roomId)
+  if (snapshotTimer !== undefined) {
+    clearTimeout(snapshotTimer)
+    roomSnapshotTimers.delete(roomId)
+  }
+  const slideTimer = roomSlideTimers.get(roomId)
+  if (slideTimer !== undefined) {
+    clearTimeout(slideTimer)
+    roomSlideTimers.delete(roomId)
+  }
 
   if (useMemory()) {
     const idx = memoryRooms.findIndex((r) => r.id === roomId)
@@ -82,9 +74,14 @@ async function handleParticipantLeave(
   roomTimers: Map<string, ReturnType<typeof setTimeout>>,
   roomSessionStartAt: Map<string, number>,
   roomDeletionTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomOwners: Map<string, string>,
+  roomGameWords: Map<string, string>,
+  roomSnapshots: Map<string, Map<string, string>>,
+  roomSnapshotTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomVotes: Map<string, Map<string, Map<string, number>>>,
+  roomSlideTimers: Map<string, ReturnType<typeof setTimeout>>,
   useMemory: () => boolean,
 ): Promise<void> {
-  // Determine current owner before removing participant
   let currentOwnerId: string | undefined
   if (useMemory()) {
     currentOwnerId = memoryRooms.find((r) => r.id === roomId)?.ownerId
@@ -93,29 +90,28 @@ async function handleParticipantLeave(
     currentOwnerId = doc?.ownerId
   }
 
-  // Remove from participant map
   const names = lobbyParticipants.get(roomId)
   names?.delete(userId)
 
-  // Remove from DB participants list
   if (!useMemory()) {
     await RoomModel.updateOne({ id: roomId }, { $pull: { participants: userId } })
   }
 
-  // Notify remaining participants
   io.to(roomId).emit('user:left', userId)
 
   const remaining = [...(names?.keys() ?? [])]
 
   if (remaining.length === 0) {
-    // Last person left — wait before deleting to allow page-refresh reconnects
     const handle = setTimeout(() => {
-      deleteRoom(roomId, memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
-        roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers, useMemory)
+      deleteRoom(
+        roomId, memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
+        roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
+        roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
+        roomVotes, roomSlideTimers, useMemory,
+      )
     }, ROOM_DELETION_GRACE_MS)
     roomDeletionTimers.set(roomId, handle)
   } else if (currentOwnerId === userId) {
-    // Host left and others remain — transfer to earliest joined participant
     const newOwnerId = remaining[0]
 
     if (useMemory()) {
@@ -125,6 +121,7 @@ async function handleParticipantLeave(
       await RoomModel.updateOne({ id: roomId }, { ownerId: newOwnerId })
     }
 
+    roomOwners.set(roomId, newOwnerId)
     io.to(roomId).emit('room:host_changed', newOwnerId)
   }
 }
@@ -140,11 +137,16 @@ export function registerRoomHandlers(
   roomTimers: Map<string, ReturnType<typeof setTimeout>>,
   roomSessionStartAt: Map<string, number>,
   roomDeletionTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomOwners: Map<string, string>,
+  roomGameWords: Map<string, string>,
+  roomSnapshots: Map<string, Map<string, string>>,
+  roomSnapshotTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomVotes: Map<string, Map<string, Map<string, number>>>,
+  roomSlideTimers: Map<string, ReturnType<typeof setTimeout>>,
   useMemory: () => boolean,
 ): void {
   socket.on('room:join', async (roomId: string) => {
     try {
-      // Prevent joining a second room while already in one
       const currentRooms = [...socket.rooms].filter((r) => r !== socket.id)
       if (currentRooms.length > 0 && !currentRooms.includes(roomId)) {
         socket.emit('error', { message: 'You are already in another room' })
@@ -183,7 +185,6 @@ export function registerRoomHandlers(
         return
       }
 
-      // Cancel pending deletion if this room was counting down
       const deletionHandle = roomDeletionTimers.get(roomId)
       if (deletionHandle !== undefined) {
         clearTimeout(deletionHandle)
@@ -198,36 +199,40 @@ export function registerRoomHandlers(
         }
       }
 
-      // Track participant name in lobby map
       const names = lobbyParticipants.get(roomId) ?? new Map<string, string>()
       names.set(socket.userId, socket.userName)
       lobbyParticipants.set(roomId, names)
 
-      // Get room status
-      const status = roomStatuses.get(roomId) ?? (room.status ?? 'waiting')
+      // Track owner in fast-lookup map
+      roomOwners.set(roomId, room.ownerId)
 
-      // Send lobby state to joining user (enriched with settings + sessionStartedAt)
+      const status = roomStatuses.get(roomId) ?? (room.status ?? 'waiting')
       const participants = [...names.entries()].map(([id, name]) => ({ id, name }))
+
       socket.emit('room:lobby', {
         participants,
         status,
         ownerId: room.ownerId,
-        settings: roomSettings.get(roomId) ?? { timerDurationMs: 0 },
+        settings: roomSettings.get(roomId) ?? DEFAULT_SETTINGS,
         sessionStartedAt: status === 'started' ? roomSessionStartAt.get(roomId) : undefined,
       })
 
-      // Send chat history to joining user
       socket.emit('chat:history', roomMessages.get(roomId) ?? [])
 
-      // Send current board state
-      if (useMemory()) {
+      // In DTW mode during active game phases, don't send shared board state
+      const settings = roomSettings.get(roomId) ?? DEFAULT_SETTINGS
+      const isDtw = settings.gameMode === 'draw-the-word'
+      const isActiveGame = status === 'started' || status === 'word-entry' || status === 'review' || status === 'results'
+
+      if (isDtw && isActiveGame) {
+        socket.emit('room:state', [])
+      } else if (useMemory()) {
         socket.emit('room:state', [])
       } else {
         const board = await BoardModel.findOne({ roomId })
         socket.emit('room:state', board?.elements ?? [])
       }
 
-      // Notify others
       socket.to(roomId).emit('user:joined', {
         id: socket.userId,
         name: socket.userName,
@@ -241,8 +246,8 @@ export function registerRoomHandlers(
     try {
       const { roomId, settings } = payload
 
-      // Validate timer duration
       if (!VALID_TIMER_DURATIONS_MS.has(settings.timerDurationMs)) return
+      if (!VALID_GAME_MODES.has(settings.gameMode)) return
 
       let ownerId: string | undefined
 
@@ -257,18 +262,42 @@ export function registerRoomHandlers(
       if (!ownerId || ownerId !== socket.userId) return
 
       roomSettings.set(roomId, settings)
-      const startedAt = Date.now()
-      roomSessionStartAt.set(roomId, startedAt)
-      roomStatuses.set(roomId, 'started')
 
-      if (!useMemory()) {
-        await RoomModel.updateOne({ id: roomId }, { status: 'started' })
-      }
+      if (settings.gameMode === 'draw-the-word') {
+        // Transition to word-entry phase — host must submit the word before game starts
+        roomStatuses.set(roomId, 'word-entry')
+        if (!useMemory()) {
+          await RoomModel.updateOne({ id: roomId }, { status: 'word-entry' })
+        }
+        // Notify host to show word-entry UI; others see "waiting for host"
+        socket.emit('game:word-entry')
+        socket.to(roomId).emit('room:status_changed', 'word-entry')
+      } else {
+        // Collaborative mode — start immediately
+        const startedAt = Date.now()
+        roomSessionStartAt.set(roomId, startedAt)
+        roomStatuses.set(roomId, 'started')
 
-      io.to(roomId).emit('room:started', { settings, startedAt })
+        if (!useMemory()) {
+          await RoomModel.updateOne({ id: roomId }, { status: 'started' })
+        }
 
-      if (settings.timerDurationMs > 0) {
-        startRoomTimer(io, roomId, settings.timerDurationMs, roomStatuses, roomTimers, useMemory)
+        io.to(roomId).emit('room:started', { settings, startedAt })
+
+        if (settings.timerDurationMs > 0) {
+          startRoomTimer(roomId, settings.timerDurationMs, roomTimers, async () => {
+            roomStatuses.set(roomId, 'waiting')
+            if (!useMemory()) {
+              try {
+                await RoomModel.updateOne({ id: roomId }, { status: 'waiting' })
+                await BoardModel.updateOne({ roomId }, { $set: { elements: [] } })
+              } catch {
+                // Non-fatal
+              }
+            }
+            io.to(roomId).emit('room:time_up')
+          })
+        }
       }
     } catch {
       // Silently ignore
@@ -290,6 +319,24 @@ export function registerRoomHandlers(
       if (!ownerId || ownerId !== socket.userId) return
 
       cancelRoomTimer(roomId, roomTimers)
+
+      // Cancel review/slideshow timers too
+      const snapshotTimer = roomSnapshotTimers.get(roomId)
+      if (snapshotTimer !== undefined) {
+        clearTimeout(snapshotTimer)
+        roomSnapshotTimers.delete(roomId)
+      }
+      const slideTimer = roomSlideTimers.get(roomId)
+      if (slideTimer !== undefined) {
+        clearTimeout(slideTimer)
+        roomSlideTimers.delete(roomId)
+      }
+
+      // Clear game state
+      roomGameWords.delete(roomId)
+      roomSnapshots.delete(roomId)
+      roomVotes.delete(roomId)
+
       roomStatuses.set(roomId, 'waiting')
 
       if (!useMemory()) {
@@ -317,10 +364,13 @@ export function registerRoomHandlers(
 
       if (!ownerId || ownerId !== socket.userId) return
 
-      // Notify everyone first, then clean up immediately (explicit close)
       io.to(roomId).emit('room:closed')
-      await deleteRoom(roomId, memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
-        roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers, useMemory)
+      await deleteRoom(
+        roomId, memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
+        roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
+        roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
+        roomVotes, roomSlideTimers, useMemory,
+      )
     } catch {
       // Silently ignore
     }
@@ -355,7 +405,9 @@ export function registerRoomHandlers(
     await handleParticipantLeave(
       io, socket.userId, roomId,
       memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
-      roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers, useMemory,
+      roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
+      roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
+      roomVotes, roomSlideTimers, useMemory,
     )
     ack?.()
   })
@@ -366,8 +418,28 @@ export function registerRoomHandlers(
       await handleParticipantLeave(
         io, socket.userId, roomId,
         memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
-        roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers, useMemory,
+        roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
+        roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
+        roomVotes, roomSlideTimers, useMemory,
       )
     }
   })
+}
+
+export function buildTriggerReviewForRoom(
+  io: Server,
+  roomId: string,
+  lobbyParticipants: Map<string, Map<string, string>>,
+  roomVotes: Map<string, Map<string, Map<string, number>>>,
+  roomSlideTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomSnapshotTimers: Map<string, ReturnType<typeof setTimeout>>,
+  roomSnapshots: Map<string, Map<string, string>>,
+  roomStatuses: Map<string, RoomStatus>,
+  useMemory: () => boolean,
+): () => void {
+  return () =>
+    triggerReview(
+      io, roomId, lobbyParticipants, roomVotes, roomSlideTimers,
+      roomSnapshotTimers, roomSnapshots, roomStatuses, useMemory,
+    )
 }

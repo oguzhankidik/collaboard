@@ -11,6 +11,7 @@ import { registerRoomHandlers } from './handlers/roomHandler'
 import { registerDrawingHandlers } from './handlers/drawingHandler'
 import { registerCursorHandlers } from './handlers/cursorHandler'
 import { registerChatHandlers } from './handlers/chatHandler'
+import { registerGameHandlers } from './handlers/gameHandler'
 import { RoomModel } from './models/Room'
 import { BoardModel } from './models/Board'
 import type { Room, RoomStatus, ChatMessage, RoomSettings } from './types'
@@ -21,7 +22,8 @@ const CLIENT_URL = (process.env.CLIENT_URL ?? 'http://localhost:5173').replace(/
 const ALLOWED_ORIGINS = IS_DEV ? [CLIENT_URL, 'http://localhost:5173'] : [CLIENT_URL]
 const MONGODB_URI = process.env.MONGODB_URI ?? ''
 
-// In-memory fallback used when MongoDB is not configured
+// ── In-memory room state ────────────────────────────────────────────────────
+
 const memoryRooms: Room[] = []
 const lobbyParticipants = new Map<string, Map<string, string>>()
 const roomStatuses = new Map<string, RoomStatus>()
@@ -30,9 +32,26 @@ const roomSettings = new Map<string, RoomSettings>()
 const roomTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const roomSessionStartAt = new Map<string, number>()
 const roomDeletionTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+// ── Game mode state ─────────────────────────────────────────────────────────
+
+// Fast owner lookup (roomId → ownerId); populated on room:join
+const roomOwners = new Map<string, string>()
+// Word entered by host for Draw-the-Word games
+const roomGameWords = new Map<string, string>()
+// Canvas PNG snapshots collected at end of DTW game (roomId → userId → dataURL)
+const roomSnapshots = new Map<string, Map<string, string>>()
+// Timeout waiting for all players to submit snapshots
+const roomSnapshotTimers = new Map<string, ReturnType<typeof setTimeout>>()
+// Votes during review phase (roomId → voterUserId → targetUserId → score 1–5)
+const roomVotes = new Map<string, Map<string, Map<string, number>>>()
+// setTimeout handles for the 5-second slide intervals
+const roomSlideTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
 const useMemory = () => !MONGODB_URI
 
-// Express app
+// ── Express app ─────────────────────────────────────────────────────────────
+
 const app = express()
 app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }))
 app.use(express.json())
@@ -96,38 +115,50 @@ app.post('/rooms', requireAuth, async (req, res) => {
   }
 })
 
-// HTTP + Socket.io server
+// ── Socket.io ────────────────────────────────────────────────────────────────
+
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
   cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] },
 })
 
-// Auth middleware on every socket connection
 io.use(verifySocketToken)
 
 io.on('connection', (socket) => {
   const authSocket = socket as AuthenticatedSocket
   console.log(`[socket] connected: ${authSocket.userId} (${authSocket.userName})`)
 
-  registerRoomHandlers(io, authSocket, memoryRooms, lobbyParticipants, roomStatuses, roomMessages, roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers, useMemory)
-  registerDrawingHandlers(io, authSocket)
+  registerRoomHandlers(
+    io, authSocket,
+    memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
+    roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
+    roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
+    roomVotes, roomSlideTimers, useMemory,
+  )
+  registerDrawingHandlers(io, authSocket, roomSettings)
   registerCursorHandlers(authSocket)
   registerChatHandlers(io, authSocket, roomMessages)
+  registerGameHandlers(
+    io, authSocket,
+    lobbyParticipants, roomStatuses, roomSettings,
+    roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
+    roomVotes, roomSlideTimers, roomTimers, useMemory,
+  )
 
   socket.on('disconnect', () => {
     console.log(`[socket] disconnected: ${authSocket.userId}`)
   })
 })
 
-// MongoDB + start
+// ── MongoDB + start ──────────────────────────────────────────────────────────
+
 async function start() {
   if (!MONGODB_URI) {
     console.warn('[mongo] MONGODB_URI not set — skipping database connection')
   } else {
     await mongoose.connect(MONGODB_URI)
     console.log('[mongo] connected')
-    // Delete rooms (and their boards) that had no activity in the last 24 hours.
-    // Must run BEFORE the participants cleanup to avoid updatedAt being reset to now.
+
     const STALE_ROOM_TTL_MS = 24 * 60 * 60 * 1000
     const cutoff = new Date(Date.now() - STALE_ROOM_TTL_MS)
     const staleRooms = await RoomModel.find({ updatedAt: { $lt: cutoff } }, { id: 1 })
@@ -138,7 +169,6 @@ async function start() {
       console.log(`[mongo] deleted ${staleRooms.length} stale room(s)`)
     }
 
-    // Clear stale participant lists — socket connections don't survive restarts
     await RoomModel.updateMany({}, { $set: { participants: [] } }, { timestamps: false })
     console.log('[mongo] cleared stale participants on startup')
   }

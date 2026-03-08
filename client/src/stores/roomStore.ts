@@ -13,7 +13,7 @@ export const useRoomStore = defineStore('room', () => {
   const roomOwnerId = ref<string>('')
   const roomStatus = ref<RoomStatus>('waiting')
   const chatMessages = ref<ChatMessage[]>([])
-  const roomSettings = ref<RoomSettings>({ timerDurationMs: 0 })
+  const roomSettings = ref<RoomSettings>({ timerDurationMs: 0, gameMode: 'collaborative' })
   const sessionStartedAt = ref<number | null>(null)
 
   function setRooms(list: Room[]) {

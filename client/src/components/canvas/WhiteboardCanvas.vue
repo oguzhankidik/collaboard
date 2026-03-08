@@ -21,7 +21,10 @@ import ParticipantPanel from './ParticipantPanel.vue'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 import Minimap from './Minimap.vue'
 
-const props = defineProps<{ socket: Socket | null }>()
+const props = defineProps<{
+  socket: Socket | null
+  gameWord?: string  // shown as drawing prompt in Draw the Word mode
+}>()
 
 const route = useRoute()
 const roomId = route.params.roomId as string
@@ -33,10 +36,12 @@ const activeCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasStore = useCanvasStore()
 const authStore = useAuthStore()
 const roomStore = useRoomStore()
-const { redrawStatic, redrawActive, redrawActiveAll, canvasPoint } = useCanvas(
+const { redrawStatic, redrawActive, redrawActiveAll, canvasPoint, captureSnapshot } = useCanvas(
   staticCanvasRef,
   activeCanvasRef,
 )
+
+defineExpose({ captureSnapshot })
 
 // In-progress remote strokes (not yet committed) — plain Map, no reactivity needed
 const remoteInProgress = new Map<string, DrawElement>()
@@ -541,7 +546,17 @@ function onTextKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="relative w-full h-full overflow-hidden bg-theme-bg">
-    <ToolBar @clear-board="props.socket?.emit('board:clear', roomId)" />
+    <ToolBar @clear-board="roomStore.roomSettings.gameMode !== 'draw-the-word' && props.socket?.emit('board:clear', roomId)" />
+
+    <!-- Draw the Word prompt banner — shown only when a word is set -->
+    <div
+      v-if="props.gameWord"
+      class="dtw-prompt-banner absolute top-3 left-1/2 z-20 pointer-events-none flex items-center gap-2 px-4 py-2"
+      :style="{ transform: 'translateX(-50%)' }"
+    >
+      <span class="font-terminal text-xs text-theme-muted">Draw:</span>
+      <span class="font-pixel text-[14px] text-theme-accent-2 text-glow-accent-2">"{{ props.gameWord }}"</span>
+    </div>
 
     <!-- Static canvas: committed elements. Hidden during eraser drawing. -->
     <canvas
@@ -653,6 +668,13 @@ function onTextKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
+.dtw-prompt-banner {
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-accent-2);
+  box-shadow: 2px 2px 0 var(--color-accent-2), var(--glow-accent-2);
+  white-space: nowrap;
+}
+
 .whiteboard-canvas-layer {
   touch-action: none;
 }

@@ -5,14 +5,17 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useRoomStore } from '@/stores/roomStore'
 import { useSocket } from '@/composables/useSocket'
-import type { LobbyState, DrawElement, ChatMessage, RoomSettings } from '@/types'
+import type { LobbyState, DrawElement, ChatMessage, RoomSettings, RoomStatus, Participant, GameSlide, PlayerScore } from '@/types'
 import WhiteboardCanvas from '@/components/canvas/WhiteboardCanvas.vue'
 import RoomLobby from '@/components/room/RoomLobby.vue'
+import WordEntryModal from '@/components/room/WordEntryModal.vue'
+import GameReview from '@/components/game/GameReview.vue'
+import GameLeaderboard from '@/components/game/GameLeaderboard.vue'
 import SessionTimer from '@/components/canvas/SessionTimer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 
-type Phase = 'connecting' | 'lobby' | 'canvas' | 'error'
+type Phase = 'connecting' | 'lobby' | 'canvas' | 'review' | 'results' | 'error'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,6 +30,12 @@ const phase = ref<Phase>('connecting')
 const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
 const showStopModal = ref(false)
 const showCloseModal = ref(false)
+const showWordEntryModal = ref(false)
+const gameWord = ref('')
+const drawingSubmitted = ref(false)
+const whiteboardCanvasRef = ref<{ captureSnapshot: () => string } | null>(null)
+const currentSlide = ref<GameSlide | null>(null)
+const gameResults = ref<PlayerScore[]>([])
 
 onMounted(async () => {
   document.body.classList.add('in-board')
@@ -52,13 +61,25 @@ onMounted(async () => {
     roomStore.setRoomSettings(payload.settings)
     roomStore.setSessionStartedAt(payload.startedAt)
     roomStore.setRoomStatus('started')
+    showWordEntryModal.value = false
+    drawingSubmitted.value = false
     phase.value = 'canvas'
+  })
+
+  // Server broadcasts status changes (e.g. word-entry) to non-host players
+  socket.value.on('room:status_changed', (status: RoomStatus) => {
+    roomStore.setRoomStatus(status)
   })
 
   socket.value.on('room:stopped', () => {
     roomStore.setRoomStatus('waiting')
     roomStore.setSessionStartedAt(null)
     canvasStore.setElements([])
+    showWordEntryModal.value = false
+    drawingSubmitted.value = false
+    gameWord.value = ''
+    currentSlide.value = null
+    gameResults.value = []
     phase.value = 'lobby'
   })
 
@@ -98,6 +119,42 @@ onMounted(async () => {
     canvasStore.clearHistory()
   })
 
+  // Draw the Word: host receives this after room:start to enter the word
+  socket.value.on('game:word-entry', () => {
+    showWordEntryModal.value = true
+  })
+
+  // Draw the Word: word confirmed — broadcast to all players so canvas can show prompt
+  socket.value.on('game:word-prompt', (word: string) => {
+    gameWord.value = word
+    showWordEntryModal.value = false
+    drawingSubmitted.value = false
+  })
+
+  // Draw the Word: timer expired — capture canvas PNG and submit to server
+  socket.value.on('game:review-start', (_players: Participant[]) => {
+    roomStore.setRoomStatus('review')
+    const canvasData = whiteboardCanvasRef.value?.captureSnapshot() ?? ''
+    if (canvasData) {
+      socket.value?.emit('game:submit-snapshot', { roomId, canvasData })
+    }
+    drawingSubmitted.value = true
+  })
+
+  // Draw the Word: server sends each player's drawing for review
+  socket.value.on('game:slide', (data: GameSlide) => {
+    currentSlide.value = data
+    roomStore.setRoomStatus('review')
+    phase.value = 'review'
+  })
+
+  // Draw the Word: all slides shown — show leaderboard (Phase 5)
+  socket.value.on('game:results', (scores: PlayerScore[]) => {
+    gameResults.value = scores
+    roomStore.setRoomStatus('results')
+    phase.value = 'results'
+  })
+
   // Server-side errors (e.g. room not found, room full)
   socket.value.on('error', (err: { message: string }) => {
     console.warn('[room] server error:', err.message)
@@ -117,10 +174,14 @@ onMounted(async () => {
 onUnmounted(() => {
   document.body.classList.remove('in-board')
   canvasStore.setElements([])
-  roomStore.setLobbyState('', 'waiting', [], { timerDurationMs: 0 }, undefined)
+  roomStore.setLobbyState('', 'waiting', [], { timerDurationMs: 0, gameMode: 'collaborative' }, undefined)
   roomStore.setSessionStartedAt(null)
   roomStore.setCurrentRoomId(null)
   roomStore.clearChat()
+  showWordEntryModal.value = false
+  gameWord.value = ''
+  currentSlide.value = null
+  gameResults.value = []
 })
 
 function leaveRoom() {
@@ -142,7 +203,6 @@ function confirmClose() {
   socket.value?.emit('room:close', roomId)
   showCloseModal.value = false
 }
-
 </script>
 
 <template>
@@ -162,7 +222,7 @@ function confirmClose() {
           @click="showCloseModal = true"
         >✕ Close Room</AppButton>
         <AppButton
-          v-if="phase === 'canvas' && isOwner"
+          v-if="(phase === 'canvas' || phase === 'review' || phase === 'results') && isOwner"
           variant="danger"
           @click="showStopModal = true"
         >■ Stop</AppButton>
@@ -184,10 +244,61 @@ function confirmClose() {
     <!-- Lobby -->
     <RoomLobby v-else-if="phase === 'lobby'" :room-id="roomId" :socket="socket" />
 
+    <!-- Review: post-game drawing slideshow with voting -->
+    <div v-else-if="phase === 'review' && currentSlide" class="flex-1 overflow-hidden">
+      <GameReview
+        :slide="currentSlide"
+        :my-user-id="authStore.user?.uid ?? ''"
+        :socket="socket"
+        :room-id="roomId"
+      />
+    </div>
+
+    <!-- Results: leaderboard -->
+    <div v-else-if="phase === 'results'" class="flex-1 overflow-hidden">
+      <GameLeaderboard
+        :scores="gameResults"
+        :my-user-id="authStore.user?.uid ?? ''"
+        :is-owner="isOwner"
+        :socket="socket"
+        :room-id="roomId"
+        @leave="leaveRoom"
+      />
+    </div>
+
     <!-- Canvas -->
     <div v-else class="flex-1 relative overflow-hidden">
-      <WhiteboardCanvas :socket="socket" />
+      <WhiteboardCanvas
+        ref="whiteboardCanvasRef"
+        :socket="socket"
+        :game-word="gameWord || undefined"
+      />
+
+      <!-- DTW: drawing submitted overlay (shown after timer expires) -->
+      <Transition
+        enter-active-class="transition-opacity duration-200"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+      >
+        <div
+          v-if="drawingSubmitted"
+          class="absolute inset-0 z-40 flex items-center justify-center bg-black/75 pointer-events-none"
+        >
+          <div class="dtw-submitted-panel flex flex-col items-center gap-3 px-8 py-6 text-center">
+            <span class="font-pixel text-[14px] text-theme-accent-2 text-glow-accent-2">✓ DRAWING SUBMITTED</span>
+            <p class="font-terminal text-sm text-theme-muted">Waiting for other players…</p>
+          </div>
+        </div>
+      </Transition>
     </div>
+
+    <!-- Word entry modal — shown to host after starting Draw the Word -->
+    <WordEntryModal
+      :open="showWordEntryModal"
+      :room-id="roomId"
+      :socket="socket"
+      @cancel="showWordEntryModal = false"
+    />
 
     <!-- Close room confirmation modal -->
     <AppModal title="CLOSE ROOM" :open="showCloseModal" @close="showCloseModal = false">
@@ -222,3 +333,11 @@ function confirmClose() {
     </AppModal>
   </div>
 </template>
+
+<style scoped>
+.dtw-submitted-panel {
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-accent-2);
+  box-shadow: 4px 4px 0 var(--color-accent-2), var(--glow-accent-2);
+}
+</style>

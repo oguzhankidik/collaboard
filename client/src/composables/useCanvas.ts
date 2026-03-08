@@ -197,12 +197,28 @@ export function useCanvas(
     window.removeEventListener('resize', resize)
   })
 
-  return { canvasPoint, resize, redrawStatic, redrawActive, redrawActiveAll }
+  // Composite both canvas layers onto a temp canvas and return a PNG data URL.
+  // The static canvas holds all committed elements; active canvas is clear at review time.
+  function captureSnapshot(): string {
+    const sc = staticCanvasRef.value
+    if (!sc) return ''
+    const temp = document.createElement('canvas')
+    temp.width = sc.width
+    temp.height = sc.height
+    const ctx = temp.getContext('2d')
+    if (!ctx) return ''
+    ctx.fillStyle = '#0f0f1a'
+    ctx.fillRect(0, 0, temp.width, temp.height)
+    ctx.drawImage(sc, 0, 0)
+    return temp.toDataURL('image/png')
+  }
+
+  return { canvasPoint, resize, redrawStatic, redrawActive, redrawActiveAll, captureSnapshot }
 }
 
 // --- Drawing helpers ---
 
-export function drawElement(c: CanvasRenderingContext2D, element: DrawElement) {
+export function drawElement(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, element: DrawElement) {
   c.save()
   c.strokeStyle = element.color
   c.lineWidth = element.strokeWidth
@@ -243,7 +259,7 @@ export function drawElement(c: CanvasRenderingContext2D, element: DrawElement) {
   c.restore()
 }
 
-function drawSelectionBox(c: CanvasRenderingContext2D, element: DrawElement) {
+function drawSelectionBox(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, element: DrawElement) {
   const { x, y, w, h } = getElementBounds(element)
   const PAD = 6
   c.save()
@@ -254,7 +270,7 @@ function drawSelectionBox(c: CanvasRenderingContext2D, element: DrawElement) {
   c.restore()
 }
 
-function drawPen(c: CanvasRenderingContext2D, points: Point[]) {
+function drawPen(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, points: Point[]) {
   if (points.length < 2) return
   c.beginPath()
   c.moveTo(points[0].x, points[0].y)
@@ -264,14 +280,14 @@ function drawPen(c: CanvasRenderingContext2D, points: Point[]) {
   c.stroke()
 }
 
-function drawRect(c: CanvasRenderingContext2D, points: Point[]) {
+function drawRect(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, points: Point[]) {
   if (points.length < 2) return
   const [start, end] = [points[0], points[points.length - 1]]
   c.beginPath()
   c.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y)
 }
 
-function drawCircle(c: CanvasRenderingContext2D, points: Point[]) {
+function drawCircle(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, points: Point[]) {
   if (points.length < 2) return
   const [start, end] = [points[0], points[points.length - 1]]
   const rx = (end.x - start.x) / 2
@@ -283,7 +299,7 @@ function drawCircle(c: CanvasRenderingContext2D, points: Point[]) {
   c.stroke()
 }
 
-function drawLine(c: CanvasRenderingContext2D, points: Point[]) {
+function drawLine(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, points: Point[]) {
   if (points.length < 2) return
   const from = points[0]
   const to = points[points.length - 1]
@@ -293,7 +309,7 @@ function drawLine(c: CanvasRenderingContext2D, points: Point[]) {
   c.stroke()
 }
 
-function drawArrow(c: CanvasRenderingContext2D, points: Point[]) {
+function drawArrow(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, points: Point[]) {
   if (points.length < 2) return
   const from = points[0]
   const to = points[points.length - 1]
@@ -313,7 +329,7 @@ function drawArrow(c: CanvasRenderingContext2D, points: Point[]) {
   c.stroke()
 }
 
-function drawEraser(c: CanvasRenderingContext2D, points: Point[], size: number) {
+function drawEraser(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, points: Point[], size: number) {
   const r = size / 2
   if (points.length === 1) {
     c.beginPath()
@@ -332,7 +348,7 @@ function drawEraser(c: CanvasRenderingContext2D, points: Point[], size: number) 
   c.fill()
 }
 
-function drawText(c: CanvasRenderingContext2D, element: DrawElement) {
+function drawText(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, element: DrawElement) {
   if (!element.text || element.points.length === 0) return
   const { x, y } = element.points[0]
   c.font = `${element.strokeWidth * 8 + 12}px sans-serif`
@@ -396,7 +412,7 @@ function floodFillImageData(
   }
 }
 
-function drawFill(c: CanvasRenderingContext2D, element: DrawElement): void {
+function drawFill(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, element: DrawElement): void {
   const seed = element.points[0]
   if (!seed) return
   const store = useCanvasStore()

@@ -1,6 +1,6 @@
 import type { Server } from 'socket.io'
 import type { AuthenticatedSocket } from '../middleware/authMiddleware'
-import type { DrawElement } from '../types'
+import type { DrawElement, RoomSettings } from '../types'
 import { BoardModel } from '../models/Board'
 import { RateLimiter } from '../lib/rateLimiter'
 
@@ -24,13 +24,23 @@ function isValidElement(el: unknown): el is DrawElement {
   return true
 }
 
-export function registerDrawingHandlers(_io: Server, socket: AuthenticatedSocket): void {
+function isDtwMode(roomId: string, roomSettings: Map<string, RoomSettings>): boolean {
+  return roomSettings.get(roomId)?.gameMode === 'draw-the-word'
+}
+
+export function registerDrawingHandlers(
+  _io: Server,
+  socket: AuthenticatedSocket,
+  roomSettings: Map<string, RoomSettings>,
+): void {
   socket.on('disconnect', () => drawLimiter.remove(socket.userId))
 
   socket.on('draw:remove', async (elementId: unknown) => {
     if (typeof elementId !== 'string' || !elementId) return
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
+      // In DTW mode, draw:remove only affects the local player — no broadcast
+      if (isDtwMode(roomId, roomSettings)) continue
       socket.to(roomId).emit('draw:removed', elementId)
       try {
         await BoardModel.findOneAndUpdate(
@@ -42,12 +52,15 @@ export function registerDrawingHandlers(_io: Server, socket: AuthenticatedSocket
       }
     }
   })
+
   socket.on('draw:start', (element: DrawElement) => {
     if (!drawLimiter.allow(socket.userId)) return
     if (!isValidElement(element)) return
     const trusted = { ...element, userId: socket.userId }
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
+      // In DTW mode, each player draws on their own board — no cross-broadcasting
+      if (isDtwMode(roomId, roomSettings)) continue
       socket.to(roomId).emit('draw:remote', trusted)
     }
   })
@@ -58,6 +71,7 @@ export function registerDrawingHandlers(_io: Server, socket: AuthenticatedSocket
     const trusted = { ...element, userId: socket.userId }
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
+      if (isDtwMode(roomId, roomSettings)) continue
       socket.to(roomId).emit('draw:remote', trusted)
     }
   })
@@ -68,9 +82,9 @@ export function registerDrawingHandlers(_io: Server, socket: AuthenticatedSocket
     const trusted = { ...element, userId: socket.userId }
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
+      // In DTW mode: don't broadcast to others and don't persist to shared board
+      if (isDtwMode(roomId, roomSettings)) continue
       socket.to(roomId).emit('draw:committed', trusted)
-
-      // Persist only on draw:end
       try {
         await BoardModel.findOneAndUpdate(
           { roomId },
@@ -78,9 +92,8 @@ export function registerDrawingHandlers(_io: Server, socket: AuthenticatedSocket
           { upsert: true, new: true },
         )
       } catch {
-        // Non-fatal: drawing is still broadcast even if persistence fails
+        // Non-fatal
       }
     }
   })
-
 }

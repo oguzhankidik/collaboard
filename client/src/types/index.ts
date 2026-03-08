@@ -1,6 +1,8 @@
 export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'line' | 'text' | 'select' | 'hand' | 'fill'
 
-export type RoomStatus = 'waiting' | 'started'
+export type GameMode = 'collaborative' | 'draw-the-word'
+
+export type RoomStatus = 'waiting' | 'word-entry' | 'started' | 'review' | 'results'
 
 export interface Point {
   x: number
@@ -32,6 +34,7 @@ export interface Participant {
 
 export interface RoomSettings {
   timerDurationMs: number  // 0 = no timer
+  gameMode: GameMode
 }
 
 export interface LobbyState {
@@ -65,6 +68,21 @@ export interface GuestUser {
   isGuest: true
 }
 
+export interface PlayerScore {
+  userId: string
+  userName: string
+  totalScore: number
+  voteCount: number
+}
+
+export interface GameSlide {
+  userId: string
+  userName: string
+  canvasData: string
+  slideIndex: number
+  total: number
+}
+
 export interface SocketEvents {
   // Client → Server
   'draw:start': (element: DrawElement) => void
@@ -79,6 +97,10 @@ export interface SocketEvents {
   'room:close': (roomId: string) => void
   'chat:send': (payload: { roomId: string; message: string }) => void
   'board:clear': (roomId: string) => void
+  // Game mode events (Client → Server)
+  'game:set-word': (payload: { roomId: string; word: string }) => void
+  'game:submit-snapshot': (payload: { roomId: string; canvasData: string }) => void
+  'game:vote': (payload: { roomId: string; targetUserId: string; score: number }) => void
 
   // Server → Client
   'draw:remote': (element: DrawElement) => void
@@ -92,9 +114,16 @@ export interface SocketEvents {
   'room:stopped': () => void
   'room:closed': () => void
   'room:host_changed': (newOwnerId: string) => void
+  'room:status_changed': (status: RoomStatus) => void
   'user:joined': (user: { id: string; name: string }) => void
   'user:left': (userId: string) => void
   'chat:message': (msg: ChatMessage) => void
   'chat:history': (messages: ChatMessage[]) => void
   'board:cleared': () => void
+  // Game mode events (Server → Client)
+  'game:word-entry': () => void
+  'game:word-prompt': (word: string) => void
+  'game:review-start': (players: Participant[]) => void
+  'game:slide': (data: GameSlide) => void
+  'game:results': (scores: PlayerScore[]) => void
 }

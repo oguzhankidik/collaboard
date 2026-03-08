@@ -1,9 +1,12 @@
 export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'line' | 'text' | 'select' | 'fill'
 
-export type RoomStatus = 'waiting' | 'started'
+export type GameMode = 'collaborative' | 'draw-the-word'
+
+export type RoomStatus = 'waiting' | 'word-entry' | 'started' | 'review' | 'results'
 
 export interface RoomSettings {
   timerDurationMs: number  // 0 = no timer
+  gameMode: GameMode
 }
 
 export interface Point {
@@ -42,4 +45,11 @@ export interface DrawElement {
   text?: string
   userId: string
   createdAt: number
+}
+
+export interface PlayerScore {
+  userId: string
+  userName: string
+  totalScore: number
+  voteCount: number
 }
