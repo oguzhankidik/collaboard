@@ -13,6 +13,14 @@ const roomStore = useRoomStore()
 
 const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
 
+let colorDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+function onColorInput(e: Event) {
+  const value = (e.target as HTMLInputElement).value
+  if (colorDebounceTimer !== null) clearTimeout(colorDebounceTimer)
+  colorDebounceTimer = setTimeout(() => { canvasStore.setActiveColor(value) }, 80)
+}
+
 const toolbarScrollRef = ref<HTMLElement | null>(null)
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
@@ -138,7 +146,7 @@ const canRedo = computed(() => canvasStore.redoStack.length > 0)
 
       <label class="btn-icon cursor-pointer label-reset" title="Color">
         <span class="w-4 h-4 border border-theme" :style="{ backgroundColor: canvasStore.activeColor }" />
-        <input type="color" class="sr-only" :value="canvasStore.activeColor" @input="canvasStore.setActiveColor(($event.target as HTMLInputElement).value)" />
+        <input type="color" class="sr-only" :value="canvasStore.activeColor" @input="onColorInput" />
       </label>
 
       <select
