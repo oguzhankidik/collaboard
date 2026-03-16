@@ -7,8 +7,6 @@ export interface AuthenticatedSocket extends Socket {
   userEmail: string
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 export async function verifySocketToken(
   socket: Socket,
   next: (err?: Error) => void,
@@ -26,11 +24,7 @@ export async function verifySocketToken(
     return
   }
 
-  const { token, guestId, guestName } = socket.handshake.auth as {
-    token?: string
-    guestId?: string
-    guestName?: string
-  }
+  const { token } = socket.handshake.auth as { token?: string }
 
   if (token) {
     try {
@@ -43,16 +37,6 @@ export async function verifySocketToken(
     } catch {
       next(new Error('Invalid authentication token'))
     }
-  } else if (guestId && typeof guestName === 'string' && guestName.trim()) {
-    if (!UUID_RE.test(guestId)) {
-      next(new Error('Invalid guest ID'))
-      return
-    }
-    const authSocket = socket as AuthenticatedSocket
-    authSocket.userId = guestId
-    authSocket.userName = guestName.trim().slice(0, 50)
-    authSocket.userEmail = ''
-    next()
   } else {
     next(new Error('Authentication required'))
   }

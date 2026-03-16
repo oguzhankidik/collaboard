@@ -13,9 +13,10 @@ const { logout } = useAuth()
 
 const showCreateModal = ref(false)
 
-const isGuest = computed(() => !!authStore.user && 'isGuest' in authStore.user)
+const isGuest = computed(() => authStore.user?.isAnonymous ?? false)
 const isInRoom = computed(() => roomStore.currentRoomId !== null)
-const canCreateRoom = computed(() => !isGuest.value && !isInRoom.value)
+// const canCreateRoom = computed(() => !isGuest.value && !isInRoom.value)
+const canCreateRoom = computed(() => !isInRoom.value)
 </script>
 
 <template>
@@ -45,9 +46,9 @@ const canCreateRoom = computed(() => !isGuest.value && !isInRoom.value)
         <div v-else-if="isInRoom" class="text-xs text-theme-muted">
           Leave your current room to create a new one.
         </div>
-        <div v-else-if="isGuest" class="text-xs text-theme-muted">
+        <!-- <div v-else-if="isGuest" class="text-xs text-theme-muted">
           Guests can only join existing rooms.
-        </div>
+        </div> -->
       </div>
 
       <div v-if="isInRoom" class="mb-4 px-3 py-2 alert-danger text-xs">

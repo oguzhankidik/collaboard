@@ -62,11 +62,12 @@ export interface ChatMessage {
   timestamp: number
 }
 
-export interface GuestUser {
-  uid: string
-  displayName: string
-  isGuest: true
-}
+// GuestUser removed — guests now use Firebase Anonymous Auth (user.isAnonymous === true)
+// export interface GuestUser {
+//   uid: string
+//   displayName: string
+//   isGuest: true
+// }
 
 export interface PlayerScore {
   userId: string
@@ -93,6 +94,7 @@ export interface SocketEvents {
   'room:join': (roomId: string) => void
   'room:leave': (roomId: string) => void
   'room:start': (payload: { roomId: string; settings: RoomSettings }) => void
+  'room:settings_changed': (payload: { roomId: string; settings: RoomSettings }) => void
   'room:stop': (roomId: string) => void
   'room:close': (roomId: string) => void
   'chat:send': (payload: { roomId: string; message: string }) => void
@@ -115,6 +117,7 @@ export interface SocketEvents {
   'room:closed': () => void
   'room:host_changed': (newOwnerId: string) => void
   'room:status_changed': (status: RoomStatus) => void
+  'room:settings_changed': (settings: RoomSettings) => void
   'user:joined': (user: { id: string; name: string }) => void
   'user:left': (userId: string) => void
   'chat:message': (msg: ChatMessage) => void

@@ -302,6 +302,20 @@ export function registerRoomHandlers(
     }
   })
 
+  socket.on('room:settings_changed', (payload: { roomId: string; settings: RoomSettings }) => {
+    try {
+      const { roomId, settings } = payload
+      if (!VALID_TIMER_DURATIONS_MS.has(settings.timerDurationMs)) return
+      if (!VALID_GAME_MODES.has(settings.gameMode)) return
+      if (roomOwners.get(roomId) !== socket.userId) return
+      if ((roomStatuses.get(roomId) ?? 'waiting') !== 'waiting') return
+      roomSettings.set(roomId, settings)
+      io.to(roomId).emit('room:settings_changed', settings)
+    } catch (err) {
+      console.error('room:settings_changed error', err)
+    }
+  })
+
   socket.on('room:stop', async (roomId: string) => {
     try {
       let ownerId: string | undefined

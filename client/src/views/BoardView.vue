@@ -58,6 +58,10 @@ onMounted(async () => {
     canvasStore.setElements(elements)
   })
 
+  socket.value.on('room:settings_changed', (settings: RoomSettings) => {
+    roomStore.setRoomSettings(settings)
+  })
+
   socket.value.on('room:started', (payload: { settings: RoomSettings; startedAt: number }) => {
     roomStore.setRoomSettings(payload.settings)
     roomStore.setSessionStartedAt(payload.startedAt)

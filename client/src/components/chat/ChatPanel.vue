@@ -49,7 +49,7 @@ function onKeydown(e: KeyboardEvent) {
       <span>■ CHAT</span>
     </div>
 
-    <div ref="messageListRef" class="message-list overflow-y-auto flex flex-col gap-2 p-2">
+    <div ref="messageListRef" class="message-list flex-1 overflow-y-auto flex flex-col gap-2 p-2">
       <div
         v-for="(msg, i) in roomStore.chatMessages"
         :key="i"
@@ -82,8 +82,7 @@ function onKeydown(e: KeyboardEvent) {
 
 <style scoped>
 .message-list {
-  max-height: 12rem;
-  min-height: 4rem;
+  min-height: 0;
 }
 
 .minimize-btn {
