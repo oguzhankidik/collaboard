@@ -117,7 +117,7 @@ export interface SocketEvents {
   'room:closed': () => void
   'room:host_changed': (newOwnerId: string) => void
   'room:status_changed': (status: RoomStatus) => void
-  'room:settings_changed': (settings: RoomSettings) => void
+  'room:settings_updated': (settings: RoomSettings) => void
   'user:joined': (user: { id: string; name: string }) => void
   'user:left': (userId: string) => void
   'chat:message': (msg: ChatMessage) => void

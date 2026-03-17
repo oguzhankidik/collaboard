@@ -58,7 +58,7 @@ onMounted(async () => {
     canvasStore.setElements(elements)
   })
 
-  socket.value.on('room:settings_changed', (settings: RoomSettings) => {
+  socket.value.on('room:settings_updated', (settings: RoomSettings) => {
     roomStore.setRoomSettings(settings)
   })
 

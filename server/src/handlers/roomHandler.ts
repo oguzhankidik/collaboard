@@ -310,7 +310,7 @@ export function registerRoomHandlers(
       if (roomOwners.get(roomId) !== socket.userId) return
       if ((roomStatuses.get(roomId) ?? 'waiting') !== 'waiting') return
       roomSettings.set(roomId, settings)
-      io.to(roomId).emit('room:settings_changed', settings)
+      io.to(roomId).emit('room:settings_updated', settings)
     } catch (err) {
       console.error('room:settings_changed error', err)
     }
