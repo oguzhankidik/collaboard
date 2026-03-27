@@ -1,8 +1,7 @@
 import { ref } from 'vue'
 import { signInWithPopup, signInAnonymously, signOut, updateProfile } from 'firebase/auth'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { useRouter, useRoute } from 'vue-router'
-import { auth, googleProvider, db } from '@/lib/firebase'
+import { auth, googleProvider } from '@/lib/firebase'
 import { useAuthStore } from '@/stores/authStore'
 
 export function useAuth() {
@@ -41,11 +40,6 @@ export function useAuth() {
       const result = await signInAnonymously(auth)
       await updateProfile(result.user, { displayName: trimmed })
       await result.user.getIdToken(true)
-      await setDoc(doc(db, 'users', result.user.uid), {
-        displayName: trimmed,
-        isAnonymous: true,
-        createdAt: serverTimestamp(),
-      })
       authStore.setUser(result.user)
       await redirectAfterLogin()
     } catch (err) {
