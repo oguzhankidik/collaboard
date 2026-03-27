@@ -1,8 +1,8 @@
 export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'line' | 'text' | 'select' | 'hand' | 'fill'
 
-export type GameMode = 'collaborative' | 'draw-the-word'
+export type GameMode = 'collaborative' | 'draw-the-word' | 'collaborative-story'
 
-export type RoomStatus = 'waiting' | 'word-entry' | 'started' | 'review' | 'results'
+export type RoomStatus = 'waiting' | 'word-entry' | 'started' | 'review' | 'results' | 'story-results'
 
 export interface Point {
   x: number
@@ -76,6 +76,27 @@ export interface PlayerScore {
   voteCount: number
 }
 
+export interface StoryTurn {
+  turnIndex: number
+  userId: string
+  userName: string
+  canvasData: string
+}
+
+export interface StoryBoard {
+  originUserId: string
+  originUserName: string
+  turns: StoryTurn[]
+}
+
+export interface StoryBoardInfo {
+  round: number
+  totalRounds: number
+  boardOriginUserId: string
+  boardOriginUserName: string
+  canvasData: string
+}
+
 export interface GameSlide {
   userId: string
   userName: string
@@ -103,6 +124,7 @@ export interface SocketEvents {
   'game:set-word': (payload: { roomId: string; word: string }) => void
   'game:submit-snapshot': (payload: { roomId: string; canvasData: string }) => void
   'game:vote': (payload: { roomId: string; targetUserId: string; score: number }) => void
+  'story:submit-snapshot': (payload: { roomId: string; canvasData: string }) => void
 
   // Server → Client
   'draw:remote': (element: DrawElement) => void
@@ -129,4 +151,8 @@ export interface SocketEvents {
   'game:review-start': (players: Participant[]) => void
   'game:slide': (data: GameSlide) => void
   'game:results': (scores: PlayerScore[]) => void
+  'story:board-received': (info: StoryBoardInfo) => void
+  'story:round-started': (payload: { startedAt: number }) => void
+  'story:snapshot-request': () => void
+  'story:results': (boards: StoryBoard[]) => void
 }

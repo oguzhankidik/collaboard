@@ -27,6 +27,10 @@ function isDtwMode(roomId: string, roomSettings: Map<string, RoomSettings>): boo
   return roomSettings.get(roomId)?.gameMode === 'draw-the-word'
 }
 
+function isStoryMode(roomId: string, roomSettings: Map<string, RoomSettings>): boolean {
+  return roomSettings.get(roomId)?.gameMode === 'collaborative-story'
+}
+
 export function registerDrawingHandlers(
   _io: Server,
   socket: AuthenticatedSocket,
@@ -38,7 +42,7 @@ export function registerDrawingHandlers(
     if (typeof elementId !== 'string' || !elementId) return
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
-      // In DTW mode, draw:remove only affects the local player — no broadcast
+      if (isStoryMode(roomId, roomSettings)) continue
       if (isDtwMode(roomId, roomSettings)) continue
       socket.to(roomId).emit('draw:removed', elementId)
       try {
@@ -58,7 +62,7 @@ export function registerDrawingHandlers(
     const trusted = { ...element, userId: socket.userId }
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
-      // In DTW mode, each player draws on their own board — no cross-broadcasting
+      if (isStoryMode(roomId, roomSettings)) continue
       if (isDtwMode(roomId, roomSettings)) continue
       socket.to(roomId).emit('draw:remote', trusted)
     }
@@ -70,6 +74,7 @@ export function registerDrawingHandlers(
     const trusted = { ...element, userId: socket.userId }
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
+      if (isStoryMode(roomId, roomSettings)) continue
       if (isDtwMode(roomId, roomSettings)) continue
       socket.to(roomId).emit('draw:remote', trusted)
     }
@@ -81,7 +86,7 @@ export function registerDrawingHandlers(
     const trusted = { ...element, userId: socket.userId }
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
-      // In DTW mode: don't broadcast to others and don't persist to shared board
+      if (isStoryMode(roomId, roomSettings)) continue
       if (isDtwMode(roomId, roomSettings)) continue
       socket.to(roomId).emit('draw:committed', trusted)
       try {

@@ -5,17 +5,18 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useRoomStore } from '@/stores/roomStore'
 import { useSocket } from '@/composables/useSocket'
-import type { LobbyState, DrawElement, ChatMessage, RoomSettings, RoomStatus, Participant, GameSlide, PlayerScore } from '@/types'
+import type { LobbyState, DrawElement, ChatMessage, RoomSettings, RoomStatus, Participant, GameSlide, PlayerScore, StoryBoard, StoryBoardInfo } from '@/types'
 import WhiteboardCanvas from '@/components/canvas/WhiteboardCanvas.vue'
 import RoomLobby from '@/components/room/RoomLobby.vue'
 import WordEntryModal from '@/components/room/WordEntryModal.vue'
 import GameReview from '@/components/game/GameReview.vue'
 import GameLeaderboard from '@/components/game/GameLeaderboard.vue'
+import CollabStoryReview from '@/components/game/CollabStoryReview.vue'
 import SessionTimer from '@/components/canvas/SessionTimer.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 
-type Phase = 'connecting' | 'lobby' | 'canvas' | 'review' | 'results' | 'error'
+type Phase = 'connecting' | 'lobby' | 'canvas' | 'review' | 'results' | 'story-results' | 'error'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,11 +34,32 @@ const showCloseModal = ref(false)
 const showWordEntryModal = ref(false)
 const gameWord = ref('')
 const drawingSubmitted = ref(false)
-const whiteboardCanvasRef = ref<{ captureSnapshot: () => string } | null>(null)
+const whiteboardCanvasRef = ref<{ captureSnapshot: () => string; loadBackground: (dataUrl: string) => Promise<void> } | null>(null)
 const currentSlide = ref<GameSlide | null>(null)
 const gameResults = ref<PlayerScore[]>([])
 const slideSnapshots = new Map<string, string>()
 const winnerCanvas = ref('')
+const storyBoards = ref<StoryBoard[]>([])
+const storyBoardInfo = ref<StoryBoardInfo | null>(null)
+const storyCountdown = ref<number | null>(null)
+const pendingBoardInfo = ref<StoryBoardInfo | null>(null)
+
+function startRoundTransition(info: StoryBoardInfo): void {
+  pendingBoardInfo.value = info
+  storyCountdown.value = 3
+  const tick = setInterval(() => {
+    if (storyCountdown.value === null) { clearInterval(tick); return }
+    storyCountdown.value--
+    if (storyCountdown.value <= 0) {
+      clearInterval(tick)
+      storyCountdown.value = null
+      storyBoardInfo.value = pendingBoardInfo.value
+      pendingBoardInfo.value = null
+      canvasStore.setElements([])
+      whiteboardCanvasRef.value?.loadBackground(storyBoardInfo.value?.canvasData ?? '')
+    }
+  }, 1000)
+}
 
 onMounted(async () => {
   document.body.classList.add('in-board')
@@ -86,6 +108,10 @@ onMounted(async () => {
     gameResults.value = []
     slideSnapshots.clear()
     winnerCanvas.value = ''
+    storyBoards.value = []
+    storyBoardInfo.value = null
+    storyCountdown.value = null
+    pendingBoardInfo.value = null
     phase.value = 'lobby'
   })
 
@@ -158,6 +184,25 @@ onMounted(async () => {
     phase.value = 'results'
   })
 
+  socket.value.on('story:board-received', (info: StoryBoardInfo) => {
+    startRoundTransition(info)
+  })
+
+  socket.value.on('story:round-started', (payload: { startedAt: number }) => {
+    roomStore.setSessionStartedAt(payload.startedAt)
+  })
+
+  socket.value.on('story:snapshot-request', () => {
+    const canvasData = whiteboardCanvasRef.value?.captureSnapshot() ?? ''
+    socket.value?.emit('story:submit-snapshot', { roomId, canvasData })
+  })
+
+  socket.value.on('story:results', (boards: StoryBoard[]) => {
+    storyBoards.value = boards
+    storyBoardInfo.value = null
+    phase.value = 'story-results'
+  })
+
   socket.value.on('error', (err: { message: string }) => {
     console.warn('[room] server error:', err.message)
     router.push({ name: 'home' })
@@ -185,6 +230,8 @@ onUnmounted(() => {
   gameResults.value = []
   slideSnapshots.clear()
   winnerCanvas.value = ''
+  storyBoards.value = []
+  storyBoardInfo.value = null
 })
 
 function leaveRoom() {
@@ -223,7 +270,7 @@ function confirmClose() {
           @click="showCloseModal = true"
         >✕ Close Room</AppButton>
         <AppButton
-          v-if="(phase === 'canvas' || phase === 'review' || phase === 'results') && isOwner"
+          v-if="(phase === 'canvas' || phase === 'review' || phase === 'results' || phase === 'story-results') && isOwner"
           variant="danger"
           @click="showStopModal = true"
         >■ Stop</AppButton>
@@ -242,7 +289,7 @@ function confirmClose() {
 
     <RoomLobby v-else-if="phase === 'lobby'" :room-id="roomId" :socket="socket" />
 
-    <div v-else-if="phase === 'review' && currentSlide" class="flex-1 overflow-hidden">
+    <div v-else-if="phase === 'review' && currentSlide" class="flex-1 overflow-hidden max-w-[1440px] w-full mx-auto">
       <GameReview
         :slide="currentSlide"
         :my-user-id="authStore.user?.uid ?? ''"
@@ -251,7 +298,7 @@ function confirmClose() {
       />
     </div>
 
-    <div v-else-if="phase === 'results'" class="flex-1 overflow-hidden">
+    <div v-else-if="phase === 'results'" class="flex-1 overflow-hidden max-w-[1440px] w-full mx-auto">
       <GameLeaderboard
         :scores="gameResults"
         :winner-canvas="winnerCanvas"
@@ -263,11 +310,23 @@ function confirmClose() {
       />
     </div>
 
+    <div v-else-if="phase === 'story-results'" class="flex-1 overflow-hidden max-w-[1440px] w-full mx-auto">
+      <CollabStoryReview
+        :boards="storyBoards"
+        :socket="socket"
+        :room-id="roomId"
+        :my-user-id="authStore.user?.uid ?? ''"
+        :is-owner="isOwner"
+        @leave="leaveRoom"
+      />
+    </div>
+
     <div v-else class="flex-1 relative overflow-hidden">
       <WhiteboardCanvas
         ref="whiteboardCanvasRef"
         :socket="socket"
         :game-word="gameWord || undefined"
+        :story-board-info="storyBoardInfo ?? undefined"
       />
 
       <Transition
@@ -283,6 +342,38 @@ function confirmClose() {
             <span class="font-pixel text-[14px] text-theme-accent-2 text-glow-accent-2">✓ DRAWING SUBMITTED</span>
             <p class="font-terminal text-sm text-theme-muted">Waiting for other players…</p>
           </div>
+        </div>
+      </Transition>
+
+      <Transition
+        enter-active-class="transition-opacity duration-300"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-300"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="storyCountdown !== null"
+          class="absolute inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-black/85"
+        >
+          <span class="font-pixel text-[11px] text-theme-muted tracking-widest">NEXT ROUND STARTING</span>
+          <Transition
+            mode="out-in"
+            enter-active-class="transition-all duration-200"
+            enter-from-class="opacity-0 scale-150"
+            enter-to-class="opacity-100 scale-100"
+            leave-active-class="transition-all duration-150"
+            leave-from-class="opacity-100 scale-100"
+            leave-to-class="opacity-0 scale-75"
+          >
+            <span :key="storyCountdown" class="font-pixel text-[72px] text-theme-accent text-glow-accent leading-none">
+              {{ storyCountdown }}
+            </span>
+          </Transition>
+          <span class="font-terminal text-sm text-theme-muted">
+            Get ready…
+          </span>
         </div>
       </Transition>
     </div>

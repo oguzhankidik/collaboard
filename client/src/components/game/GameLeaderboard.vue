@@ -229,7 +229,7 @@ function handleLeave(): void {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  image-rendering: pixelated;
+  image-rendering: auto;
   border: 2px solid var(--color-accent-2);
   box-shadow: 0 0 16px rgba(0, 245, 212, 0.2);
 }

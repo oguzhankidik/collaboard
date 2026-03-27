@@ -282,12 +282,13 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  image-rendering: pixelated;
+  image-rendering: auto;
 }
 
 .review-footer {
   flex-shrink: 0;
-  border-top: 2px solid var(--color-border);
+  border: 2px solid var(--color-border);
+  border-bottom: none;
 }
 
 .review-footer-status {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import type { Socket } from 'socket.io-client'
-import type { DrawElement, Point } from '@/types'
+import type { DrawElement, Point, StoryBoardInfo } from '@/types'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useRoomStore } from '@/stores/roomStore'
@@ -23,7 +23,8 @@ import Minimap from './Minimap.vue'
 
 const props = defineProps<{
   socket: Socket | null
-  gameWord?: string  // shown as drawing prompt in Draw the Word mode
+  gameWord?: string
+  storyBoardInfo?: StoryBoardInfo
 }>()
 
 const route = useRoute()
@@ -35,12 +36,15 @@ const activeCanvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasStore = useCanvasStore()
 const authStore = useAuthStore()
 const roomStore = useRoomStore()
-const { redrawStatic, redrawActive, redrawActiveAll, canvasPoint, captureSnapshot } = useCanvas(
+const { redrawStatic, redrawActive, redrawActiveAll, canvasPoint, captureSnapshot, loadBackground } = useCanvas(
   staticCanvasRef,
   activeCanvasRef,
 )
 
-defineExpose({ captureSnapshot })
+const myUserId = computed(() => authStore.user?.uid ?? '')
+const isViewLocked = computed(() => roomStore.roomSettings.gameMode !== 'collaborative')
+
+defineExpose({ captureSnapshot, loadBackground })
 
 const remoteInProgress = new Map<string, DrawElement>()
 
@@ -146,6 +150,8 @@ function scheduleEraserRender() {
 }
 
 onMounted(() => {
+  if (isViewLocked.value) canvasStore.resetView()
+
   window.addEventListener('resize', () => {
     scheduleStaticRender()
     scheduleActiveRender()
@@ -223,7 +229,8 @@ function onWheel(e: WheelEvent) {
 
   const oldZoom = canvasStore.zoom
   const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR
-  const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, oldZoom * factor))
+  const minZoom = isViewLocked.value ? 1 : ZOOM_MIN
+  const newZoom = Math.min(ZOOM_MAX, Math.max(minZoom, oldZoom * factor))
 
   const worldX = mx / oldZoom + canvasStore.panX
   const worldY = my / oldZoom + canvasStore.panY
@@ -326,7 +333,8 @@ function onPointerMove(e: PointerEvent) {
   if (activePinchPointers.size === 2) {
     const [p1, p2] = [...activePinchPointers.values()]
     const dist = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY)
-    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinchStartZoom * (dist / pinchStartDistance)))
+    const minZoom = isViewLocked.value ? 1 : ZOOM_MIN
+    const newZoom = Math.min(ZOOM_MAX, Math.max(minZoom, pinchStartZoom * (dist / pinchStartDistance)))
     canvasStore.setZoom(newZoom)
     canvasStore.setPan(
       pinchStartMidWorld.x - pinchStartMidScreen.x / newZoom,
@@ -522,6 +530,17 @@ function onTextKeydown(e: KeyboardEvent) {
       <span class="font-pixel text-[14px] text-theme-accent-2 text-glow-accent-2">"{{ props.gameWord }}"</span>
     </div>
 
+    <div
+      v-if="props.storyBoardInfo"
+      class="story-board-banner absolute top-[80px] left-1/2 z-20 pointer-events-none px-4 py-2"
+      :style="{ transform: 'translateX(-50%)' }"
+    >
+      <span class="font-terminal text-xs text-theme-muted">Round {{ props.storyBoardInfo.round + 1 }}/{{ props.storyBoardInfo.totalRounds }}:</span>
+      <span class="font-pixel text-[14px] ml-2 text-theme-accent">
+        {{ props.storyBoardInfo.boardOriginUserId === myUserId ? 'Your board' : props.storyBoardInfo.boardOriginUserName + "'s board" }}
+      </span>
+    </div>
+
     <canvas
       ref="staticCanvasRef"
       class="whiteboard-canvas-layer absolute inset-0 w-full h-full pointer-events-none"
@@ -628,6 +647,13 @@ function onTextKeydown(e: KeyboardEvent) {
   background-color: var(--color-surface);
   border: 2px solid var(--color-accent-2);
   box-shadow: 2px 2px 0 var(--color-accent-2), var(--glow-accent-2);
+  white-space: nowrap;
+}
+
+.story-board-banner {
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-accent);
+  box-shadow: 2px 2px 0 var(--color-accent);
   white-space: nowrap;
 }
 

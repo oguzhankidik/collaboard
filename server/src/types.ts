@@ -1,8 +1,8 @@
 export type ToolType = 'pen' | 'eraser' | 'rect' | 'circle' | 'arrow' | 'line' | 'text' | 'select' | 'fill'
 
-export type GameMode = 'collaborative' | 'draw-the-word'
+export type GameMode = 'collaborative' | 'draw-the-word' | 'collaborative-story'
 
-export type RoomStatus = 'waiting' | 'word-entry' | 'started' | 'review' | 'results'
+export type RoomStatus = 'waiting' | 'word-entry' | 'started' | 'review' | 'results' | 'story-results'
 
 export interface RoomSettings {
   timerDurationMs: number  // 0 = no timer
@@ -52,4 +52,25 @@ export interface PlayerScore {
   userName: string
   totalScore: number
   voteCount: number
+}
+
+export interface StoryTurn {
+  turnIndex: number
+  userId: string
+  userName: string
+  canvasData: string
+}
+
+export interface StoryBoard {
+  originUserId: string
+  originUserName: string
+  turns: StoryTurn[]
+}
+
+export interface StoryBoardInfo {
+  round: number
+  totalRounds: number
+  boardOriginUserId: string
+  boardOriginUserName: string
+  canvasData: string
 }

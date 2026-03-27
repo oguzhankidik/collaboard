@@ -37,7 +37,7 @@ const canCreateRoom = computed(() => !isInRoom.value)
       </div>
     </header>
 
-    <main class="max-w-3xl mx-auto px-6 py-10">
+    <main class="max-w-[1440px] mx-auto px-6 py-10">
       <div class="flex items-center justify-between mb-6">
         <h2 class="font-pixel text-theme">Rooms</h2>
         <div v-if="canCreateRoom">

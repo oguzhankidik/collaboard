@@ -2,13 +2,14 @@ import type { Server } from 'socket.io'
 import type { AuthenticatedSocket } from '../middleware/authMiddleware'
 import { RoomModel } from '../models/Room'
 import { BoardModel } from '../models/Board'
-import type { Room, RoomStatus, ChatMessage, RoomSettings, GameMode } from '../types'
+import type { Room, RoomStatus, ChatMessage, RoomSettings, GameMode, StoryTurn } from '../types'
 import { cancelRoomTimer, startRoomTimer } from '../lib/timerUtils'
 import { triggerReview } from './gameHandler'
+import { startStoryRound } from './storyHandler'
 
 const MAX_PARTICIPANTS = 20
-const VALID_TIMER_DURATIONS_MS = new Set([0, 60_000, 120_000, 180_000, 300_000, 600_000])
-const VALID_GAME_MODES = new Set<GameMode>(['collaborative', 'draw-the-word'])
+const VALID_TIMER_DURATIONS_MS = new Set([0, 10_000, 60_000, 120_000, 180_000, 300_000, 600_000])
+const VALID_GAME_MODES = new Set<GameMode>(['collaborative', 'draw-the-word', 'collaborative-story'])
 const ROOM_DELETION_GRACE_MS = 15_000
 const DEFAULT_SETTINGS: RoomSettings = { timerDurationMs: 0, gameMode: 'collaborative' }
 
@@ -28,6 +29,11 @@ async function deleteRoom(
   roomSnapshotTimers: Map<string, ReturnType<typeof setTimeout>>,
   roomVotes: Map<string, Map<string, Map<string, number>>>,
   roomSlideTimers: Map<string, ReturnType<typeof setTimeout>>,
+  storyPlayerOrder: Map<string, string[]>,
+  storyRound: Map<string, number>,
+  storyBoardHistory: Map<string, Map<string, StoryTurn[]>>,
+  storyPending: Map<string, Map<string, string | null>>,
+  storySnapshotTimer: Map<string, ReturnType<typeof setTimeout>>,
   useMemory: () => boolean,
 ): Promise<void> {
   cancelRoomTimer(roomId, roomTimers)
@@ -51,6 +57,16 @@ async function deleteRoom(
   if (slideTimer !== undefined) {
     clearTimeout(slideTimer)
     roomSlideTimers.delete(roomId)
+  }
+
+  storyPlayerOrder.delete(roomId)
+  storyRound.delete(roomId)
+  storyBoardHistory.delete(roomId)
+  storyPending.delete(roomId)
+  const stTimer = storySnapshotTimer.get(roomId)
+  if (stTimer !== undefined) {
+    clearTimeout(stTimer)
+    storySnapshotTimer.delete(roomId)
   }
 
   if (useMemory()) {
@@ -80,6 +96,11 @@ async function handleParticipantLeave(
   roomSnapshotTimers: Map<string, ReturnType<typeof setTimeout>>,
   roomVotes: Map<string, Map<string, Map<string, number>>>,
   roomSlideTimers: Map<string, ReturnType<typeof setTimeout>>,
+  storyPlayerOrder: Map<string, string[]>,
+  storyRound: Map<string, number>,
+  storyBoardHistory: Map<string, Map<string, StoryTurn[]>>,
+  storyPending: Map<string, Map<string, string | null>>,
+  storySnapshotTimer: Map<string, ReturnType<typeof setTimeout>>,
   useMemory: () => boolean,
 ): Promise<void> {
   let currentOwnerId: string | undefined
@@ -110,7 +131,9 @@ async function handleParticipantLeave(
         roomId, memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
         roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
         roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
-        roomVotes, roomSlideTimers, useMemory,
+        roomVotes, roomSlideTimers,
+        storyPlayerOrder, storyRound, storyBoardHistory, storyPending, storySnapshotTimer,
+        useMemory,
       )
     }, ROOM_DELETION_GRACE_MS)
     roomDeletionTimers.set(roomId, handle)
@@ -146,6 +169,12 @@ export function registerRoomHandlers(
   roomSnapshotTimers: Map<string, ReturnType<typeof setTimeout>>,
   roomVotes: Map<string, Map<string, Map<string, number>>>,
   roomSlideTimers: Map<string, ReturnType<typeof setTimeout>>,
+  storyPlayerOrder: Map<string, string[]>,
+  storyRound: Map<string, number>,
+  storyBoardHistory: Map<string, Map<string, StoryTurn[]>>,
+  storyPending: Map<string, Map<string, string | null>>,
+  storySnapshotTimer: Map<string, ReturnType<typeof setTimeout>>,
+  userSockets: Map<string, string>,
   useMemory: () => boolean,
 ): void {
   socket.on('room:join', async (roomId: string) => {
@@ -223,7 +252,8 @@ export function registerRoomHandlers(
 
       const settings = roomSettings.get(roomId) ?? DEFAULT_SETTINGS
       const isDtw = settings.gameMode === 'draw-the-word'
-      const isActiveGame = status === 'started' || status === 'word-entry' || status === 'review' || status === 'results'
+      const isStory = settings.gameMode === 'collaborative-story'
+      const isActiveGame = status === 'started' || status === 'word-entry' || status === 'review' || status === 'results' || status === 'story-results'
 
       if (isDtw && isActiveGame) {
         socket.emit('room:state', [])
@@ -232,6 +262,29 @@ export function registerRoomHandlers(
       } else {
         const board = await BoardModel.findOne({ roomId })
         socket.emit('room:state', board?.elements ?? [])
+      }
+
+      if (isStory && status === 'started') {
+        const playerOrder = storyPlayerOrder.get(roomId)
+        const round = storyRound.get(roomId) ?? 0
+        if (playerOrder && playerOrder.length > 0 && round < playerOrder.length) {
+          const N = playerOrder.length
+          const i = playerOrder.indexOf(socket.userId)
+          if (i !== -1) {
+            const boardOriginIndex = (i - round + N) % N
+            const boardOriginUserId = playerOrder[boardOriginIndex]
+            const boardOriginUserName = names.get(boardOriginUserId) ?? 'Unknown'
+            const boardTurns = storyBoardHistory.get(roomId)?.get(boardOriginUserId) ?? []
+            const lastTurn = boardTurns[boardTurns.length - 1]
+            socket.emit('story:board-received', {
+              round,
+              totalRounds: N,
+              boardOriginUserId,
+              boardOriginUserName,
+              canvasData: lastTurn?.canvasData ?? '',
+            })
+          }
+        }
       }
 
       socket.to(roomId).emit('user:joined', {
@@ -271,6 +324,35 @@ export function registerRoomHandlers(
         }
         socket.emit('game:word-entry')
         socket.to(roomId).emit('room:status_changed', 'word-entry')
+      } else if (settings.gameMode === 'collaborative-story') {
+        if (settings.timerDurationMs === 0) {
+          socket.emit('room:error', 'Timer required')
+          return
+        }
+        const startedAt = Date.now()
+        roomSessionStartAt.set(roomId, startedAt)
+        const order = [...(lobbyParticipants.get(roomId)?.keys() ?? [])]
+        storyPlayerOrder.set(roomId, order)
+        storyRound.set(roomId, 0)
+        storyBoardHistory.set(roomId, new Map(order.map((uid) => [uid, []])))
+        roomStatuses.set(roomId, 'started')
+        if (!useMemory()) {
+          await RoomModel.updateOne({ id: roomId }, { status: 'started' })
+        }
+        io.to(roomId).emit('room:started', { settings, startedAt })
+        startStoryRound(io, roomId, {
+          lobbyParticipants,
+          roomStatuses,
+          roomSettings,
+          storyPlayerOrder,
+          storyRound,
+          storyBoardHistory,
+          storyPending,
+          storySnapshotTimer,
+          roomTimers,
+          userSockets,
+          useMemory,
+        })
       } else {
         const startedAt = Date.now()
         roomSessionStartAt.set(roomId, startedAt)
@@ -347,6 +429,16 @@ export function registerRoomHandlers(
       roomSnapshots.delete(roomId)
       roomVotes.delete(roomId)
 
+      storyPlayerOrder.delete(roomId)
+      storyRound.delete(roomId)
+      storyBoardHistory.delete(roomId)
+      storyPending.delete(roomId)
+      const stTimer = storySnapshotTimer.get(roomId)
+      if (stTimer !== undefined) {
+        clearTimeout(stTimer)
+        storySnapshotTimer.delete(roomId)
+      }
+
       roomStatuses.set(roomId, 'waiting')
 
       if (!useMemory()) {
@@ -379,7 +471,9 @@ export function registerRoomHandlers(
         roomId, memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
         roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
         roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
-        roomVotes, roomSlideTimers, useMemory,
+        roomVotes, roomSlideTimers,
+        storyPlayerOrder, storyRound, storyBoardHistory, storyPending, storySnapshotTimer,
+        useMemory,
       )
     } catch {
       // Silently ignore
@@ -417,7 +511,9 @@ export function registerRoomHandlers(
       memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
       roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
       roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
-      roomVotes, roomSlideTimers, useMemory,
+      roomVotes, roomSlideTimers,
+      storyPlayerOrder, storyRound, storyBoardHistory, storyPending, storySnapshotTimer,
+      useMemory,
     )
     ack?.()
   })
@@ -430,7 +526,9 @@ export function registerRoomHandlers(
         memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
         roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
         roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
-        roomVotes, roomSlideTimers, useMemory,
+        roomVotes, roomSlideTimers,
+        storyPlayerOrder, storyRound, storyBoardHistory, storyPending, storySnapshotTimer,
+        useMemory,
       )
     }
   })

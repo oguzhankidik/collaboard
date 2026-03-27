@@ -1,5 +1,5 @@
 import type { AuthenticatedSocket } from '../middleware/authMiddleware'
-import type { Point } from '../types'
+import type { Point, RoomSettings } from '../types'
 import { RateLimiter } from '../lib/rateLimiter'
 
 // Max 40 cursor events per second per user (client throttles to 30ms already)
@@ -19,13 +19,14 @@ function colorForUser(userId: string): string {
   return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length]
 }
 
-export function registerCursorHandlers(socket: AuthenticatedSocket): void {
+export function registerCursorHandlers(socket: AuthenticatedSocket, roomSettings: Map<string, RoomSettings>): void {
   socket.on('disconnect', () => cursorLimiter.remove(socket.userId))
 
   socket.on('cursor:move', (position: Point) => {
     if (!cursorLimiter.allow(socket.userId)) return
     for (const roomId of socket.rooms) {
       if (roomId === socket.id) continue
+      if (roomSettings.get(roomId)?.gameMode !== 'collaborative') continue
       socket.to(roomId).emit('cursor:remote', {
         userId: socket.userId,
         userName: socket.userName,

@@ -4,7 +4,7 @@ import type { Socket } from 'socket.io-client'
 import type { GameMode } from '@/types'
 import { useRoomStore } from '@/stores/roomStore'
 import { useAuthStore } from '@/stores/authStore'
-import { TIMER_OPTIONS_MIN } from '@/constants'
+import { TIMER_OPTIONS_MS } from '@/constants'
 import AppButton from '@/components/ui/AppButton.vue'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 
@@ -24,13 +24,16 @@ const selectedDurationMs = ref(roomStore.roomSettings.timerDurationMs)
 const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
 
 const isStartDisabled = computed(
-  () => !isOwner.value || roomStore.roomStatus === 'word-entry',
+  () =>
+    !isOwner.value
+    || roomStore.roomStatus === 'word-entry'
+    || (roomStore.roomSettings.gameMode === 'collaborative-story' && roomStore.roomSettings.timerDurationMs === 0),
 )
 
 function formatDuration(ms: number): string {
   if (ms === 0) return 'None'
-  const minutes = ms / 60_000
-  return `${minutes}m`
+  if (ms < 60_000) return `${ms / 1000}s`
+  return `${ms / 60_000}m`
 }
 
 function selectTimer(ms: number) {
@@ -109,6 +112,18 @@ watch(showMobileChat, (open) => {
               <span class="font-terminal text-[11px] text-theme-muted">Pictionary mode</span>
             </div>
           </button>
+          <button
+            class="sidebar-mode-item"
+            :class="roomStore.roomSettings.gameMode === 'collaborative-story' ? 'sidebar-mode-item--active-story' : ''"
+            :disabled="!isOwner"
+            @click="isOwner && selectGameMode('collaborative-story')"
+          >
+            <span class="font-pixel text-[13px]">◈</span>
+            <div class="flex flex-col gap-0.5 text-left">
+              <span class="font-pixel text-[10px] tracking-wider">COLLAB STORY</span>
+              <span class="font-terminal text-[11px] text-theme-muted">Draw in turns</span>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -158,15 +173,15 @@ watch(showMobileChat, (open) => {
 
               <div v-if="isOwner" class="flex flex-wrap gap-1">
                 <button
-                  v-for="minutes in TIMER_OPTIONS_MIN"
-                  :key="minutes"
+                  v-for="ms in TIMER_OPTIONS_MS"
+                  :key="ms"
                   class="px-2 py-1 text-xs font-terminal border transition-colors"
-                  :class="selectedDurationMs === minutes * 60_000
+                  :class="selectedDurationMs === ms
                     ? 'border-theme-accent text-theme-accent bg-theme-surface-2'
                     : 'border-theme text-theme-muted hover:border-theme-accent hover:text-theme'"
-                  @click="selectTimer(minutes * 60_000)"
+                  @click="selectTimer(ms)"
                 >
-                  {{ formatDuration(minutes * 60_000) }}
+                  {{ formatDuration(ms) }}
                 </button>
               </div>
 
@@ -189,6 +204,12 @@ watch(showMobileChat, (open) => {
               Waiting for host to start…
             </p>
           </template>
+          <p
+            v-if="isOwner && roomStore.roomSettings.gameMode === 'collaborative-story' && roomStore.roomSettings.timerDurationMs === 0"
+            class="text-xs text-center font-terminal text-theme-danger"
+          >
+            ◈ Collab Story requires a session timer
+          </p>
 
           <div class="flex gap-2">
             <AppButton variant="secondary" class="flex-1" @click="copyLink">
@@ -293,5 +314,10 @@ watch(showMobileChat, (open) => {
   border-left-color: var(--color-accent-2);
   background-color: var(--color-surface-2);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent-2) 30%, transparent);
+}
+
+.sidebar-mode-item--active-story {
+  border-left-color: var(--color-accent);
+  background-color: var(--color-surface-2);
 }
 </style>

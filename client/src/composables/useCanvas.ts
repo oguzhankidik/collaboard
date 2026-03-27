@@ -49,6 +49,7 @@ export function useCanvas(
 ) {
   const staticCtx = ref<CanvasRenderingContext2D | null>(null)
   const activeCtx = ref<CanvasRenderingContext2D | null>(null)
+  const backgroundImage = ref<HTMLImageElement | null>(null)
 
   function getStaticCtx(): CanvasRenderingContext2D {
     if (!staticCtx.value) throw new Error('Static canvas not initialized')
@@ -113,6 +114,9 @@ export function useCanvas(
     c.save()
     applyViewTransform(c)
     drawBoardBorder(c)
+    if (backgroundImage.value) {
+      c.drawImage(backgroundImage.value, 0, 0, canvas.width, canvas.height)
+    }
     for (const el of elements) {
       if (isInViewport(el, canvas)) {
         drawElement(c, el)
@@ -196,18 +200,74 @@ export function useCanvas(
   function captureSnapshot(): string {
     const sc = staticCanvasRef.value
     if (!sc) return ''
+    const store = useCanvasStore()
+
     const temp = document.createElement('canvas')
     temp.width = sc.width
     temp.height = sc.height
     const ctx = temp.getContext('2d')
     if (!ctx) return ''
+
     ctx.fillStyle = '#0f0f1a'
     ctx.fillRect(0, 0, temp.width, temp.height)
-    ctx.drawImage(sc, 0, 0)
+
+    if (backgroundImage.value) {
+      ctx.drawImage(backgroundImage.value, 0, 0, temp.width, temp.height)
+    }
+
+    // Temporarily reset view so elements are drawn at their natural world positions
+    // (pan=0, zoom=1), independent of where the player is currently looking.
+    // drawFill also reads store.panX/panY/zoom to convert seed coords, so this reset
+    // ensures fill elements render correctly on the no-transform temp canvas.
+    const savedPanX = store.panX
+    const savedPanY = store.panY
+    const savedZoom = store.zoom
+    store.setPan(0, 0)
+    store.setZoom(1)
+
+    for (const el of store.elements) {
+      drawElement(ctx, el)
+    }
+
+    store.setPan(savedPanX, savedPanY)
+    store.setZoom(savedZoom)
+
     return temp.toDataURL('image/png')
   }
 
-  return { canvasPoint, resize, redrawStatic, redrawActive, redrawActiveAll, captureSnapshot }
+  function loadBackground(dataUrl: string): Promise<void> {
+    return new Promise((resolve) => {
+      if (!dataUrl) {
+        backgroundImage.value = null
+        const store = useCanvasStore()
+        redrawStatic(store.elements)
+        resolve()
+        return
+      }
+      const img = new Image()
+      img.onload = () => {
+        backgroundImage.value = img
+        const store = useCanvasStore()
+        redrawStatic(store.elements)
+        resolve()
+      }
+      img.src = dataUrl
+    })
+  }
+
+  function clearCanvas(): void {
+    backgroundImage.value = null
+    const store = useCanvasStore()
+    store.setElements([])
+    redrawStatic([])
+    const canvas = activeCanvasRef.value
+    if (canvas) {
+      const c = activeCtx.value
+      if (c) c.clearRect(0, 0, canvas.width, canvas.height)
+    }
+  }
+
+  return { canvasPoint, resize, redrawStatic, redrawActive, redrawActiveAll, captureSnapshot, loadBackground, clearCanvas }
 }
 
 export function drawElement(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, element: DrawElement) {

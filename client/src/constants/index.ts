@@ -17,7 +17,7 @@ export const MINIMAP_W = 200
 export const MINIMAP_H = 200
 export const MINIMAP_PADDING = 50   // world-space padding around content bounds
 
-export const TIMER_OPTIONS_MIN = [0, 1, 2, 3, 5, 10]  // 0 = None
+export const TIMER_OPTIONS_MS = [0, 10_000, 60_000, 120_000, 180_000, 300_000, 600_000]  // 0 = None
 export const TIMER_WARN_YELLOW_MS = 60_000
 export const TIMER_WARN_RED_MS = 15_000
-export const VALID_TIMER_DURATIONS_MS = new Set([0, 60_000, 120_000, 180_000, 300_000, 600_000])
+export const VALID_TIMER_DURATIONS_MS = new Set([0, 10_000, 60_000, 120_000, 180_000, 300_000, 600_000])

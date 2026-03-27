@@ -12,9 +12,10 @@ import { registerDrawingHandlers } from './handlers/drawingHandler'
 import { registerCursorHandlers } from './handlers/cursorHandler'
 import { registerChatHandlers } from './handlers/chatHandler'
 import { registerGameHandlers } from './handlers/gameHandler'
+import { registerStoryHandlers } from './handlers/storyHandler'
 import { RoomModel } from './models/Room'
 import { BoardModel } from './models/Board'
-import type { Room, RoomStatus, ChatMessage, RoomSettings } from './types'
+import type { Room, RoomStatus, ChatMessage, RoomSettings, StoryTurn } from './types'
 
 const PORT = Number(process.env.PORT ?? 3000)
 const IS_DEV = process.env.NODE_ENV !== 'production'
@@ -37,6 +38,13 @@ const roomSnapshots = new Map<string, Map<string, string>>()
 const roomSnapshotTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const roomVotes = new Map<string, Map<string, Map<string, number>>>()
 const roomSlideTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+const storyPlayerOrder   = new Map<string, string[]>()
+const storyRound         = new Map<string, number>()
+const storyBoardHistory  = new Map<string, Map<string, StoryTurn[]>>()
+const storyPending       = new Map<string, Map<string, string | null>>()
+const storySnapshotTimer = new Map<string, ReturnType<typeof setTimeout>>()
+const userSockets        = new Map<string, string>()
 
 const useMemory = () => !MONGODB_URI
 
@@ -112,15 +120,19 @@ io.on('connection', (socket) => {
   const authSocket = socket as AuthenticatedSocket
   console.log(`[socket] connected: ${authSocket.userId} (${authSocket.userName})`)
 
+  userSockets.set(authSocket.userId, authSocket.id)
+
   registerRoomHandlers(
     io, authSocket,
     memoryRooms, lobbyParticipants, roomStatuses, roomMessages,
     roomSettings, roomTimers, roomSessionStartAt, roomDeletionTimers,
     roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
-    roomVotes, roomSlideTimers, useMemory,
+    roomVotes, roomSlideTimers,
+    storyPlayerOrder, storyRound, storyBoardHistory, storyPending, storySnapshotTimer,
+    userSockets, useMemory,
   )
   registerDrawingHandlers(io, authSocket, roomSettings)
-  registerCursorHandlers(authSocket)
+  registerCursorHandlers(authSocket, roomSettings)
   registerChatHandlers(io, authSocket, roomMessages)
   registerGameHandlers(
     io, authSocket,
@@ -128,9 +140,16 @@ io.on('connection', (socket) => {
     roomOwners, roomGameWords, roomSnapshots, roomSnapshotTimers,
     roomVotes, roomSlideTimers, roomTimers, useMemory,
   )
+  registerStoryHandlers(
+    io, authSocket,
+    lobbyParticipants, roomStatuses, roomSettings,
+    storyPlayerOrder, storyRound, storyBoardHistory, storyPending, storySnapshotTimer,
+    roomTimers, userSockets, useMemory,
+  )
 
   socket.on('disconnect', () => {
     console.log(`[socket] disconnected: ${authSocket.userId}`)
+    userSockets.delete(authSocket.userId)
   })
 })
 

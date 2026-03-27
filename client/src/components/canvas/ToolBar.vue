@@ -12,6 +12,7 @@ const authStore = useAuthStore()
 const roomStore = useRoomStore()
 
 const isOwner = computed(() => authStore.user?.uid === roomStore.roomOwnerId)
+const isViewLocked = computed(() => roomStore.roomSettings.gameMode !== 'collaborative')
 
 let colorDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -187,7 +188,7 @@ const canRedo = computed(() => canvasStore.redoStack.length > 0)
 
       <div class="toolbar-divider hidden md:block" />
 
-      <button title="Zoom out" class="btn-icon text-base font-bold leading-none" :disabled="canvasStore.zoom <= ZOOM_MIN" @click="canvasStore.setZoom(canvasStore.zoom - ZOOM_STEP)">−</button>
+      <button title="Zoom out" class="btn-icon text-base font-bold leading-none" :disabled="canvasStore.zoom <= (isViewLocked ? 1 : ZOOM_MIN)" @click="canvasStore.setZoom(canvasStore.zoom - ZOOM_STEP)">−</button>
       <button title="Reset zoom" class="btn-icon text-[10px] font-terminal w-10 text-center" @click="canvasStore.resetView()">{{ Math.round(canvasStore.zoom * 100) }}%</button>
       <button title="Zoom in" class="btn-icon text-base font-bold leading-none" :disabled="canvasStore.zoom >= ZOOM_MAX" @click="canvasStore.setZoom(canvasStore.zoom + ZOOM_STEP)">+</button>
     </div>
