@@ -53,6 +53,7 @@ export interface Room {
   createdAt: string
   status?: RoomStatus
   isPrivate: boolean
+  gameMode?: GameMode
 }
 
 export interface ChatMessage {

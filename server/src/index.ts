@@ -63,13 +63,21 @@ app.get('/rooms', async (_req, res) => {
     const rooms = [...memoryRooms]
       .filter(r => !r.isPrivate)
       .reverse()
-      .map(r => ({ ...r, participants: Array(liveCount(r.id)).fill('') }))
+      .map(r => ({
+        ...r,
+        participants: Array(liveCount(r.id)).fill(''),
+        gameMode: roomSettings.get(r.id)?.gameMode ?? 'collaborative',
+      }))
     res.json(rooms)
     return
   }
   try {
     const rooms = await RoomModel.find({ isPrivate: { $ne: true } }).sort({ createdAt: -1 }).limit(50)
-    res.json(rooms.map(r => ({ ...r.toObject(), participants: Array(liveCount(r.id)).fill('') })))
+    res.json(rooms.map(r => ({
+      ...r.toObject(),
+      participants: Array(liveCount(r.id)).fill(''),
+      gameMode: roomSettings.get(r.id)?.gameMode ?? 'collaborative',
+    })))
   } catch {
     res.status(500).json({ error: 'Failed to fetch rooms' })
   }
