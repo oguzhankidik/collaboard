@@ -10,6 +10,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "firebase": "^10.12.2",
     "nanoid": "^5.0.7",
     "pinia": "^2.1.7",
